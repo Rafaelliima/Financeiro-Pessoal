@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Financeiro Pessoal</string>
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_cards">Cartões</string>
+    <string name="nav_purchases">Compras</string>
+    <string name="nav_subscriptions">Assinaturas</string>
+    <string name="nav_settings">Configurações</string>
+</resources>
