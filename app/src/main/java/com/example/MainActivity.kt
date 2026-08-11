@@ -11,12 +11,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,10 +37,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.auth.GoogleAuthManager
 import com.example.auth.GoogleAccountRepository
+import com.example.data.AppVersionInfo
 import com.example.data.FirebaseManager
 import com.example.data.CardItem
 import com.example.data.PurchaseItem
 import com.example.data.SubscriptionItem
+import com.example.data.UpdateManager
 import kotlinx.coroutines.launch
 import com.example.data.JsonStorageManager
 import com.example.data.StorageData
@@ -104,6 +109,7 @@ class MainActivity : ComponentActivity() {
 fun MainAppStructure() {
     val context = LocalContext.current
     val storageManager = remember { JsonStorageManager(context) }
+    val updateManager = remember { UpdateManager(context) }
     val firebaseManager = remember { FirebaseManager() }
     val googleAuthManager = remember(context) { GoogleAuthManager(context) }
     val googleAccountRepository = remember(storageManager) { GoogleAccountRepository(storageManager) }
@@ -116,6 +122,7 @@ fun MainAppStructure() {
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var isErrorStatus by remember { mutableStateOf(false) }
     var isAuthenticating by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<AppVersionInfo?>(null) }
 
     // Launcher oficial do Google Sign-In
     val googleSignInLauncher = rememberLauncherForActivityResult(
@@ -157,6 +164,29 @@ fun MainAppStructure() {
 
     val isUserLoggedIn = storageData.googleAccount?.isConnected == true
 
+    if (updateInfo != null) {
+        AlertDialog(
+            onDismissRequest = { updateInfo = null },
+            title = { Text("Nova Atualização!") },
+            text = { 
+                Text("Uma nova versão (${updateInfo?.latestVersionName}) está disponível. Deseja baixar e instalar?")
+            },
+            confirmButton = {
+                Button(onClick = {
+                    updateInfo?.let { updateManager.downloadAndInstallApk(it.apkUrl) }
+                    updateInfo = null
+                }) {
+                    Text("Atualizar agora")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateInfo = null }) {
+                    Text("Depois", color = TextSecondary)
+                }
+            }
+        )
+    }
+
     // Carrega os dados (Local + Nuvem se conectado) ao abrir o app
     LaunchedEffect(Unit) {
         // 1. Tenta recuperar sessão existente no Google Play Services
@@ -183,6 +213,9 @@ fun MainAppStructure() {
                 storageManager.saveData(storageData)
             }
         }
+        
+        // 4. Verifica atualizações em segundo plano
+        updateInfo = updateManager.checkForUpdate()
 
         isLoading = false
     }
