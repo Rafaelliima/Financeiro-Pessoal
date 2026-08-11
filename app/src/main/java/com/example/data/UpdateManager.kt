@@ -31,22 +31,30 @@ class UpdateManager(private val context: Context) {
      */
     suspend fun checkForUpdate(): AppVersionInfo? {
         return try {
+            Log.d(TAG, "Iniciando consulta ao Firestore em config/app_version...")
             val doc = db.collection("config").document("app_version").get().await()
             if (doc.exists()) {
                 val info = doc.toObject(AppVersionInfo::class.java)
                 val currentVersionCode = getInternalVersionCode()
                 
+                Log.d(TAG, "Documento encontrado! Versão na Nuvem: ${info?.latestVersionCode}, Versão no Celular: $currentVersionCode")
+
                 if (info != null && info.latestVersionCode > currentVersionCode) {
-                    Log.i(TAG, "Nova versão disponível: ${info.latestVersionName} (Code: ${info.latestVersionCode})")
+                    Log.i(TAG, "Nova versão disponível: ${info.latestVersionName}")
                     info
                 } else {
+                    Log.d(TAG, "App já está atualizado ou info é nula.")
                     null
                 }
             } else {
+                Log.w(TAG, "O documento 'config/app_version' NÃO existe no Firestore.")
                 null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Erro ao verificar atualização", e)
+            Log.e(TAG, "ERRO CRÍTICO NA VERIFICAÇÃO: ${e.message}")
+            if (e.message?.contains("permission-denied") == true) {
+                Log.e(TAG, "DICA: Verifique as Regras de Segurança (Rules) do Firestore!")
+            }
             null
         }
     }
