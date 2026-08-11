@@ -45,6 +45,8 @@ import com.example.ui.theme.PrimaryAccent
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.data.DataSource
+import com.example.data.SubscriptionItem
+import com.example.data.CardItem
 import java.util.Locale
 import java.util.UUID
 
@@ -54,17 +56,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-
-data class SubscriptionItem(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String,
-    val monthlyValue: Double,
-    val cardId: String = "",
-    val cardName: String = "",
-    val source: DataSource = DataSource.MANUAL,
-    val createdAt: String? = null,
-    val updatedAt: String? = null
-)
 
 @Composable
 fun SubscriptionsScreen(

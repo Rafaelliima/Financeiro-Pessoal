@@ -1,23 +1,41 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -35,35 +53,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.CardPaymentItem
+import com.example.data.DataSource
+import com.example.data.CardItem
 import com.example.ui.components.EmptyStateCard
-import com.example.ui.components.StatusFeedbackBanner
+import com.example.ui.theme.BankBrandRegistry
 import com.example.ui.theme.DividerColor
 import com.example.ui.theme.PrimaryAccent
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import com.example.data.DataSource
-import java.util.UUID
-
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowRight
-import com.example.data.CardPaymentItem
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
-
-data class CardItem(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String,
-    val source: DataSource = DataSource.MANUAL,
-    val createdAt: String? = null,
-    val updatedAt: String? = null
-)
+import java.util.UUID
 
 @Composable
 fun CardsScreen(
@@ -109,7 +118,8 @@ fun CardsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(bottom = 88.dp)
+                    contentPadding = PaddingValues(bottom = 88.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     itemsIndexed(cards, key = { _, card -> card.id }) { index, card ->
                         val isPaidThisMonth = cardPayments.any {
@@ -123,9 +133,6 @@ fun CardsScreen(
                             onDelete = { cardToDelete = card },
                             onPayInvoice = { cardToPayInvoice = card }
                         )
-                        if (index < cards.size - 1) {
-                            HorizontalDivider(color = DividerColor)
-                        }
                     }
                 }
             }
@@ -185,10 +192,11 @@ fun CardsScreen(
         CardFormDialog(
             title = "Adicionar Cartão",
             initialName = "",
+            initialColorHex = null,
             onDismiss = { showAddDialog = false },
-            onConfirm = { newName ->
+            onConfirm = { newName, colorHex ->
                 if (newName.isNotBlank()) {
-                    val updatedList = cards + CardItem(name = newName.trim())
+                    val updatedList = cards + CardItem(name = newName.trim(), colorHex = colorHex)
                     onUpdateCards(updatedList)
                 }
                 showAddDialog = false
@@ -201,11 +209,12 @@ fun CardsScreen(
         CardFormDialog(
             title = "Editar Cartão",
             initialName = card.name,
+            initialColorHex = card.colorHex,
             onDismiss = { cardToEdit = null },
-            onConfirm = { updatedName ->
+            onConfirm = { updatedName, colorHex ->
                 if (updatedName.isNotBlank()) {
                     val updatedList = cards.map {
-                        if (it.id == card.id) it.copy(name = updatedName.trim()) else it
+                        if (it.id == card.id) it.copy(name = updatedName.trim(), colorHex = colorHex) else it
                     }
                     onUpdateCards(updatedList)
                 }
@@ -255,6 +264,9 @@ private fun CardRowItem(
     onPayInvoice: () -> Unit
 ) {
     var showInvoiceHistory by remember { mutableStateOf(false) }
+    val bankBrand = remember(card.name, card.colorHex) { 
+        BankBrandRegistry.getBrandForName(card.name, card.colorHex) 
+    }
 
     val historyPayments = remember(cardPayments, card.id, card.name) {
         cardPayments
@@ -266,79 +278,111 @@ private fun CardRowItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp)
             .testTag("card_item_${card.id}"),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // Visual de Cartão Físico
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.85f) // Reduz a largura para 85% da tela
+                .align(Alignment.CenterHorizontally)
+                .aspectRatio(1.586f) // Proporção padrão
+                .clip(RoundedCornerShape(16.dp)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = bankBrand.mainColor
+            )
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                bankBrand.mainColor,
+                                bankBrand.mainColor.copy(alpha = 0.85f)
+                            )
+                        )
+                    )
+                    .padding(20.dp) // Reduzido o padding interno
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.CreditCard,
-                    contentDescription = null,
-                    tint = TextSecondary
-                )
+                // Nome do Banco/Cartão (Topo)
                 Text(
-                    text = card.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Medium
+                    text = card.name.uppercase(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = bankBrand.onColor,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.TopStart)
                 )
-            }
 
-            Row {
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.testTag("edit_card_${card.id}")
+                // Simulação do Chip (Centro-Esquerda)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .size(32.dp, 24.dp) // Reduzido o tamanho do chip
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFFD4AF37).copy(alpha = 0.8f))
+                )
+
+                // Ações do Cartão (Topo-Direita)
+                Row(
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = "Editar cartão",
-                        tint = TextSecondary
-                    )
+                    IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier.size(28.dp).testTag("edit_card_${card.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "Editar",
+                            tint = bankBrand.onColor.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(28.dp).testTag("delete_card_${card.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Delete,
+                            contentDescription = "Excluir",
+                            tint = bankBrand.onColor.copy(alpha = 0.8f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.testTag("delete_card_${card.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = "Excluir cartão",
-                        tint = MaterialTheme.colorScheme.error
-                    )
+
+                // Indicador de Status (Base-Direita)
+                if (isPaidThisMonth) {
+                    val currentMonthName = remember {
+                        val cal = Calendar.getInstance()
+                        SimpleDateFormat("MMMM", Locale("pt", "BR")).format(cal.time).replaceFirstChar { it.uppercase() }
+                    }
+                    Row(
+                        modifier = Modifier.align(Alignment.BottomEnd),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = bankBrand.onColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "Fatura de $currentMonthName Paga",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = bankBrand.onColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
 
-        // Botão de Pagamento da Fatura
-        if (isPaidThisMonth) {
-            Button(
-                onClick = {},
-                enabled = false,
-                colors = ButtonDefaults.buttonColors(
-                    disabledContainerColor = DividerColor,
-                    disabledContentColor = TextSecondary
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("pay_invoice_button_${card.id}")
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.CheckCircle,
-                    contentDescription = null,
-                    tint = TextSecondary,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-                Text("Fatura paga este mês")
-            }
-        } else {
+        // Botão de Ação abaixo do Cartão
+        if (!isPaidThisMonth) {
             OutlinedButton(
                 onClick = onPayInvoice,
                 border = BorderStroke(1.dp, PrimaryAccent),
@@ -347,11 +391,11 @@ private fun CardRowItem(
                     .fillMaxWidth()
                     .testTag("pay_invoice_button_${card.id}")
             ) {
-                Text("Registrar pagamento da fatura")
+                Text("Registrar pagamento da fatura", fontWeight = FontWeight.Bold)
             }
         }
 
-        // Histórico de Faturas para este cartão (Sprint 13)
+        // Histórico de Faturas para este cartão
         if (historyPayments.isNotEmpty()) {
             TextButton(
                 onClick = { showInvoiceHistory = !showInvoiceHistory },
@@ -411,16 +455,31 @@ private fun CardRowItem(
 private fun CardFormDialog(
     title: String,
     initialName: String,
+    initialColorHex: String?,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
+    onConfirm: (String, String?) -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
+    var selectedColorHex by remember { mutableStateOf(initialColorHex) }
+
+    val presetColors = listOf(
+        "#8A05BE", // Nubank
+        "#FF7800", // Itaú
+        "#FF7A00", // Inter
+        "#EC0000", // Santander
+        "#B20C15", // Bradesco
+        "#0038A8", // BB
+        "#005CA9", // Caixa
+        "#00A335", // Mercado Pago
+        "#111111", // Preto
+        "#6B7280"  // Cinza
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary) },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -434,11 +493,52 @@ private fun CardFormDialog(
                         .fillMaxWidth()
                         .testTag("card_name_input")
                 )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Cor personalizada (opcional):",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(vertical = 4.dp)
+                    ) {
+                        items(presetColors) { hex ->
+                            val color = Color(android.graphics.Color.parseColor(hex))
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .border(
+                                        width = if (selectedColorHex == hex) 3.dp else 0.dp,
+                                        color = if (selectedColorHex == hex) PrimaryAccent else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable {
+                                        selectedColorHex = if (selectedColorHex == hex) null else hex
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (selectedColorHex == hex) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Check,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(name) },
+                onClick = { onConfirm(name, selectedColorHex) },
                 enabled = name.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = PrimaryAccent

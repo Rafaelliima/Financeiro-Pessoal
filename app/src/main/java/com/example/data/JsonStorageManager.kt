@@ -1,7 +1,6 @@
 package com.example.data
 
 import android.content.Context
-import com.example.ui.screens.CardItem
 import java.io.File
 
 class JsonStorageManager(private val context: Context) {

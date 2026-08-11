@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "167173001836",
+    "project_id": "financeiro-pessoal-503914",
+    "storage_bucket": "financeiro-pessoal-503914.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:167173001836:android:58dd03c0eec914e0ba3e49",
+        "android_client_info": {
+          "package_name": "com.aistudio.financeiro.pessoal.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "167173001836-9mfbdc4n95o02g5du141d04b3vhro727.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aistudio.financeiro.pessoal.app",
+            "certificate_hash": "6066e50f6b86ba2b641f1473d23660e441804b5a"
+          }
+        },
+        {
+          "client_id": "167173001836-f1mlhfhrrjmue2ss7kud2b6okr8ciing.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDVdUd0llqylpFLTebiVELbLWwJSbTyq8U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "167173001836-f1mlhfhrrjmue2ss7kud2b6okr8ciing.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

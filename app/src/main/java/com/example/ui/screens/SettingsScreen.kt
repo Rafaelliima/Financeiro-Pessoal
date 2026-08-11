@@ -14,13 +14,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PowerOff
 import androidx.compose.material3.AlertDialog
@@ -48,7 +45,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.GoogleAccountData
-import com.example.data.SyncEmailDiagnosticLog
 import com.example.ui.components.StatusFeedbackBanner
 import com.example.ui.theme.DividerColor
 import com.example.ui.theme.PrimaryAccent
@@ -60,14 +56,11 @@ fun SettingsScreen(
     googleAccount: GoogleAccountData? = null,
     onConnectClick: () -> Unit = {},
     onDisconnectClick: () -> Unit = {},
-    onTestGmailClick: () -> Unit = {},
-    isTestingGmail: Boolean = false,
     statusMessage: String? = null,
     isErrorStatus: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var showDisconnectDialog by remember { mutableStateOf(false) }
-    var showProfileDetails by remember { mutableStateOf(true) }
 
     val isConnected = googleAccount?.isConnected == true
 
@@ -94,9 +87,8 @@ fun SettingsScreen(
             )
         }
 
-        // Seção 1: Perfil e Conta (Menu expansível)
+        // Seção: Perfil e Conta (Menu expansível) — usada para backup na nuvem (Google Firestore)
         var showAccountMenu by remember { mutableStateOf(false) }
-        var showSyncMenu by remember { mutableStateOf(false) }
 
         Column(
             modifier = Modifier.fillMaxWidth()
@@ -207,21 +199,19 @@ fun SettingsScreen(
                                     )
                                 }
 
-                                val syncState = googleAccount?.emailSyncState
-                                val scopeGranted = syncState?.scopeGranted == true
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(top = 4.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Text("Escopo Gmail:", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                    Text("Sincronização Nuvem:", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                                     Text(
-                                        text = if (scopeGranted) "Concedido (gmail.readonly)" else "Não concedido",
+                                        text = "Ativa (Google Firestore)",
                                         style = MaterialTheme.typography.bodySmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (scopeGranted) PrimaryAccent else MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.testTag("gmail_scope_status")
+                                        color = PrimaryAccent,
+                                        modifier = Modifier.testTag("cloud_sync_status")
                                     )
                                 }
 
@@ -268,164 +258,6 @@ fun SettingsScreen(
                                 )
                                 Text("Conectar conta Google", fontWeight = FontWeight.Bold)
                             }
-                        }
-                    }
-                }
-            }
-        }
-
-        HorizontalDivider(color = DividerColor)
-
-        // Seção 2: Sincronização de Gastos (Menu expansível)
-        val syncState = googleAccount?.emailSyncState
-
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            SettingItemRow(
-                icon = Icons.Outlined.CloudSync,
-                title = "Sincronização",
-                subtitle = if (isConnected) "Sincronização automática ativa (a cada 1h e ao abrir)" else "Sincronização indisponível",
-                onClick = { showSyncMenu = !showSyncMenu },
-                trailingIcon = if (showSyncMenu) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowRight
-            )
-
-            if (showSyncMenu) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 8.dp)
-                        .testTag("gmail_diagnostic_section"),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        if (isConnected) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Última sincronização:", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                                Text(
-                                    text = syncState?.lastSyncedAt ?: "Nunca",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextPrimary,
-                                    modifier = Modifier.testTag("gmail_last_sync")
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Total de e-mails encontrados:", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                                Text(
-                                    text = "${syncState?.totalEmailsFound ?: 0}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
-                                    modifier = Modifier.testTag("gmail_total_found")
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Total de gastos importados:", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                                Text(
-                                    text = "${syncState?.totalImported ?: 0}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = PrimaryAccent,
-                                    modifier = Modifier.testTag("gmail_total_imported")
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Total de e-mails ignorados:", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                                Text(
-                                    text = "${syncState?.totalIgnored ?: 0}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
-                                    modifier = Modifier.testTag("gmail_total_ignored")
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text("Último gasto importado:", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                                Text(
-                                    text = syncState?.lastImportedExpense ?: "Nenhum",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextPrimary,
-                                    modifier = Modifier.testTag("gmail_last_imported_expense")
-                                )
-                            }
-
-                            syncState?.lastError?.let { err ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Último erro:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                                    Text(
-                                        text = err,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.testTag("gmail_last_error")
-                                    )
-                                }
-                            }
-
-                            syncState?.statusMessage?.let { msg ->
-                                Text(
-                                    text = "Status: $msg",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (syncState.lastError == null) PrimaryAccent else MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.testTag("gmail_sync_status_msg")
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Button(
-                                onClick = onTestGmailClick,
-                                enabled = !isTestingGmail,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("test_gmail_button"),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = PrimaryAccent
-                                )
-                            ) {
-                                Text(
-                                    text = if (isTestingGmail) "Sincronizando com Gmail..." else "Sincronizar agora",
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            HorizontalDivider(color = DividerColor)
-
-                            GmailSyncDiagnosticSection(logs = syncState?.diagnosticLogs ?: emptyList())
-                        } else {
-                            Text(
-                                text = "Sincronização indisponível. Conecte sua conta Google no menu Perfil e Conta acima.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
-                            )
                         }
                     }
                 }
@@ -532,221 +364,6 @@ private fun SettingItemRow(
             imageVector = trailingIcon,
             contentDescription = null,
             tint = TextSecondary
-        )
-    }
-}
-
-@Composable
-private fun GmailSyncDiagnosticSection(
-    logs: List<SyncEmailDiagnosticLog>
-) {
-    var expanded by remember { mutableStateOf(true) }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("gmail_diagnostic_logs_section"),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.BugReport,
-                        contentDescription = null,
-                        tint = PrimaryAccent,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        text = "Diagnóstico da última sincronização",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                }
-                TextButton(onClick = { expanded = !expanded }) {
-                    Text(
-                        text = if (expanded) "Ocultar" else "Exibir (${logs.size})",
-                        color = PrimaryAccent,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Text(
-                text = "Modo de diagnóstico para auditoria e depuração de e-mails processados.",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
-            )
-
-            if (expanded) {
-                if (logs.isEmpty()) {
-                    Text(
-                        text = "Nenhum e-mail processado na última sincronização.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                } else {
-                    logs.forEachIndexed { index, log ->
-                        DiagnosticEmailLogCard(index = index, log = log)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DiagnosticEmailLogCard(
-    index: Int,
-    log: SyncEmailDiagnosticLog
-) {
-    var showTechDetails by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "E-mail #${index + 1}",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-                val isImported = log.finalResult.contains("Importado", ignoreCase = true)
-                SuggestionChip(
-                    onClick = {},
-                    label = {
-                        Text(
-                            text = log.finalResult,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    },
-                    colors = SuggestionChipDefaults.suggestionChipColors(
-                        containerColor = if (isImported) PrimaryAccent.copy(alpha = 0.15f) else MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
-                        labelColor = if (isImported) PrimaryAccent else MaterialTheme.colorScheme.error
-                    ),
-                    border = null
-                )
-            }
-
-            DiagnosticItemRow(
-                label = "Valor extraído",
-                value = log.extractedValue,
-                highlight = log.extractedValue != "não encontrado"
-            )
-            DiagnosticItemRow(
-                label = "Nome extraído",
-                value = log.extractedName,
-                highlight = log.extractedName != "não encontrado"
-            )
-
-            TextButton(
-                onClick = { showTechDetails = !showTechDetails },
-                modifier = Modifier.padding(top = 2.dp)
-            ) {
-                Icon(
-                    imageVector = if (showTechDetails) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = PrimaryAccent,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
-                Text(
-                    text = if (showTechDetails) "Ocultar detalhes técnicos" else "Ver detalhes técnicos",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = PrimaryAccent,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            if (showTechDetails) {
-                DiagnosticItemRow(label = "MessageId", value = log.messageId)
-                DiagnosticItemRow(label = "Subject", value = log.subject)
-                DiagnosticItemRow(label = "From", value = log.sender)
-                DiagnosticItemRow(label = "Date", value = log.date)
-                DiagnosticItemRow(label = "Snippet retornado pela Gmail API", value = log.snippet.ifBlank { "(Vazio)" })
-                DiagnosticItemRow(
-                    label = "Data extraída",
-                    value = log.extractedDate,
-                    highlight = log.extractedDate != "não encontrada"
-                )
-
-                log.ignoreReason?.let { reason ->
-                    DiagnosticItemRow(
-                        label = "Regra (Motivo)",
-                        value = reason,
-                        isError = true
-                    )
-                }
-
-                val isIgnored = log.finalResult.equals("Ignorado", ignoreCase = true)
-                val isNameReason = log.ignoreReason?.let { reason ->
-                    reason.contains("nome", ignoreCase = true) || reason.contains("recebedor", ignoreCase = true)
-                } == true
-
-                if (isIgnored && isNameReason) {
-                    val fragmentDisplay = log.debugCapturedFragment?.ifEmpty { "(Nenhum match do regex)" } ?: "(Nenhum match do regex)"
-                    DiagnosticItemRow(
-                        label = "Trecho capturado pelo regex (Debug)",
-                        value = fragmentDisplay,
-                        isError = true
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DiagnosticItemRow(
-    label: String,
-    value: String,
-    highlight: Boolean = false,
-    isError: Boolean = false
-) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = TextSecondary
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (highlight || isError) FontWeight.Bold else FontWeight.Normal,
-            color = when {
-                isError -> MaterialTheme.colorScheme.error
-                highlight -> PrimaryAccent
-                else -> TextPrimary
-            }
         )
     }
 }

@@ -1,8 +1,9 @@
 package com.example.data
 
-import com.example.ui.screens.CardItem
-import com.example.ui.screens.PurchaseItem
-import com.example.ui.screens.SubscriptionItem
+import com.example.data.CardItem
+import com.example.data.PurchaseItem
+import com.example.data.SubscriptionItem
+import com.example.data.PaymentMethod
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -37,6 +38,7 @@ object DataRecovery {
                     val name = cObj.optString("name", "")
                     if (name.isNotBlank()) {
                         val id = cObj.optString("id", UUID.randomUUID().toString())
+                        val colorHex = if (cObj.has("colorHex") && !cObj.isNull("colorHex")) cObj.optString("colorHex") else null
                         val sourceStr = cObj.optString("source", DataSource.MANUAL.name)
                         val createdAt = cObj.optString("createdAt", null)
                         val updatedAt = cObj.optString("updatedAt", null)
@@ -44,6 +46,7 @@ object DataRecovery {
                             CardItem(
                                 id = id,
                                 name = name,
+                                colorHex = colorHex,
                                 source = DataSource.fromString(sourceStr),
                                 createdAt = createdAt,
                                 updatedAt = updatedAt
@@ -64,12 +67,12 @@ object DataRecovery {
                         val totalAmount = pObj.optDouble("totalAmount", 0.0)
                         val cardId = pObj.optString("cardId", "")
                         val cardName = pObj.optString("cardName", "")
-                        val isInstallment = pObj.optBoolean("isInstallment", false)
+                        val isInstallment = pObj.optBoolean("isInstallment", pObj.optBoolean("installment", false))
                         val totalInstallments = pObj.optInt("totalInstallments", 1)
                         val startMonth = pObj.optInt("startMonth", 1)
                         val startYear = pObj.optInt("startYear", 2026)
                         val paidInstallmentsCount = pObj.optInt("paidInstallmentsCount", 0)
-                        val isQuitada = pObj.optBoolean("isQuitada", false)
+                        val isQuitada = pObj.optBoolean("isQuitada", pObj.optBoolean("quitada", false))
                         val completedAt = pObj.optString("completedAt", null)
                         val sourceStr = pObj.optString("source", DataSource.MANUAL.name)
                         val createdAt = pObj.optString("createdAt", null)
@@ -166,6 +169,7 @@ object DataRecovery {
                         val value = deObj.optDouble("value", 0.0)
                         val date = deObj.optString("date", "")
                         val sourceStr = deObj.optString("source", DataSource.MANUAL.name)
+                        val pmStr = deObj.optString("paymentMethod", PaymentMethod.CONTA.name)
                         val observation = deObj.optString("observation", null)
                         val createdAt = deObj.optString("createdAt", null)
                         val updatedAt = deObj.optString("updatedAt", null)
@@ -177,6 +181,7 @@ object DataRecovery {
                                 value = value,
                                 date = date,
                                 source = DataSource.fromString(sourceStr),
+                                paymentMethod = PaymentMethod.fromString(pmStr),
                                 observation = observation,
                                 createdAt = createdAt,
                                 updatedAt = updatedAt

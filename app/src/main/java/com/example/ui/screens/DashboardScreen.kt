@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -37,6 +38,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.DailyExpense
+import com.example.data.PurchaseItem
+import com.example.data.CardItem
+import com.example.data.SubscriptionItem
+import com.example.ui.theme.BankBrandRegistry
 import com.example.ui.theme.DividerColor
 import com.example.ui.theme.PrimaryAccent
 import com.example.ui.theme.TextPrimary
@@ -65,13 +70,11 @@ fun DashboardScreen(
 
     // Nome do Mês Selecionado por extenso (ex: "Julho de 2026")
     val selectedPeriodName = remember(selectedMonth, selectedYear) {
-        val cal = Calendar.getInstance()
-        cal.set(Calendar.YEAR, selectedYear)
-        cal.set(Calendar.MONTH, selectedMonth - 1)
-        cal.set(Calendar.DAY_OF_MONTH, 1)
-        val monthFormat = SimpleDateFormat("MMMM 'de' yyyy", Locale("pt", "BR"))
-        val rawName = monthFormat.format(cal.time)
-        rawName.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("pt", "BR")) else it.toString() }
+        val months = listOf(
+            "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+            "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        )
+        "${months[selectedMonth - 1]} de $selectedYear"
     }
 
     // 1. Total de Assinaturas Mensais
@@ -395,6 +398,8 @@ fun DashboardScreen(
             } else {
                 cards.forEachIndexed { index, card ->
                     val cardTotal = cardTotalsMap[card.id] ?: 0.0
+                    val bankBrand = BankBrandRegistry.getBrandForName(card.name, card.colorHex)
+                    
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -403,11 +408,22 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = card.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = TextPrimary
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.CreditCard,
+                                contentDescription = null,
+                                tint = bankBrand.mainColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = card.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = TextPrimary
+                            )
+                        }
                         Text(
                             text = String.format(Locale("pt", "BR"), "R$ %.2f", cardTotal),
                             style = MaterialTheme.typography.bodyLarge,

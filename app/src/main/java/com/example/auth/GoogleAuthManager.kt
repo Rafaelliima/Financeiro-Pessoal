@@ -2,7 +2,6 @@ package com.example.auth
 
 import android.content.Context
 import android.content.Intent
-import com.example.data.EmailSyncState
 import com.example.data.GoogleAccountData
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -10,37 +9,29 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
-import com.google.android.gms.common.api.Scope
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
  * Gerenciador oficial do fluxo Google OAuth 2.0.
- * Utiliza o SDK oficial Play Services Auth configurado com o menor escopo necessário:
- * https://www.googleapis.com/auth/gmail.readonly para leitura de e-mails do Mercado Pago.
+ * Utiliza o SDK oficial Play Services Auth apenas para autenticação (login) e
+ * para habilitar o backup/sincronização dos dados na nuvem via Firebase Firestore.
  */
 class GoogleAuthManager(private val context: Context) {
 
-    companion object {
-        val GMAIL_READONLY_SCOPE = Scope("https://www.googleapis.com/auth/gmail.readonly")
-    }
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 
     private val gso: GoogleSignInOptions = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestEmail()
         .requestProfile()
-        .requestScopes(GMAIL_READONLY_SCOPE)
+        .requestIdToken(context.getString(com.example.R.string.default_web_client_id))
         .build()
 
     private val googleSignInClient: GoogleSignInClient = GoogleSignIn.getClient(context, gso)
-
-    /**
-     * Retorna se a conta atualmente autenticada possui o escopo Gmail concedido.
-     */
-    fun hasGmailScope(): Boolean {
-        val account = GoogleSignIn.getLastSignedInAccount(context) ?: return false
-        return GoogleSignIn.hasPermissions(account, GMAIL_READONLY_SCOPE)
-    }
 
     /**
      * Retorna a Intent oficial de autenticação para ser lançada pelo ActivityResultLauncher.
@@ -50,9 +41,10 @@ class GoogleAuthManager(private val context: Context) {
     }
 
     /**
-     * Processa o resultado retornado pela Intent oficial de login do Google.
+     * Processa o resultado retornado pela Intent oficial de login do Google
+     * e realiza a autenticação no Firebase.
      */
-    fun handleSignInResult(data: Intent?): Result<GoogleAccountData> {
+    suspend fun handleSignInResult(data: Intent?): Result<GoogleAccountData> {
         if (data == null) {
             return Result.failure(Exception("Login cancelado pelo usuário."))
         }
@@ -60,21 +52,20 @@ class GoogleAuthManager(private val context: Context) {
         return try {
             val account: GoogleSignInAccount? = task.getResult(ApiException::class.java)
             if (account != null) {
-                val scopeGranted = GoogleSignIn.hasPermissions(account, GMAIL_READONLY_SCOPE)
+                // 1. Autentica no Firebase usando o ID Token do Google
+                val credential = GoogleAuthProvider.getCredential(account.idToken, null)
+                auth.signInWithCredential(credential).await()
+
+                // 2. Coleta dados para o repositório local
                 val formattedDate = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date())
-                val initialSyncState = EmailSyncState(
-                    scopeGranted = scopeGranted,
-                    statusMessage = if (scopeGranted) "Permissão Gmail concedida." else "Permissão Gmail não concedida pelo usuário."
-                )
                 val accountData = GoogleAccountData(
                     isConnected = true,
                     userEmail = account.email,
                     userName = account.displayName ?: "Usuário Google",
                     photoUrl = account.photoUrl?.toString(),
                     connectedAt = formattedDate,
-                    accountId = account.id,
-                    idToken = account.idToken,
-                    emailSyncState = initialSyncState
+                    accountId = auth.currentUser?.uid ?: account.id,
+                    idToken = account.idToken
                 )
                 Result.success(accountData)
             } else {
@@ -99,7 +90,6 @@ class GoogleAuthManager(private val context: Context) {
      */
     fun getLastSignedInAccount(): GoogleAccountData? {
         val account = GoogleSignIn.getLastSignedInAccount(context) ?: return null
-        val scopeGranted = GoogleSignIn.hasPermissions(account, GMAIL_READONLY_SCOPE)
         val formattedDate = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date())
         return GoogleAccountData(
             isConnected = true,
@@ -107,19 +97,16 @@ class GoogleAuthManager(private val context: Context) {
             userName = account.displayName ?: "Usuário Google",
             photoUrl = account.photoUrl?.toString(),
             connectedAt = formattedDate,
-            accountId = account.id,
-            idToken = account.idToken,
-            emailSyncState = EmailSyncState(
-                scopeGranted = scopeGranted,
-                statusMessage = if (scopeGranted) "Permissão Gmail concedida." else "Permissão Gmail pendente."
-            )
+            accountId = auth.currentUser?.uid ?: account.id,
+            idToken = account.idToken
         )
     }
 
     /**
-     * Desconecta a conta Google e revoga o acesso da sessão oficial do Google.
+     * Desconecta a conta Google e Firebase, revogando o acesso da sessão oficial.
      */
     fun signOut(onComplete: (Boolean) -> Unit) {
+        auth.signOut()
         googleSignInClient.signOut().addOnCompleteListener { task ->
             googleSignInClient.revokeAccess().addOnCompleteListener {
                 onComplete(task.isSuccessful)

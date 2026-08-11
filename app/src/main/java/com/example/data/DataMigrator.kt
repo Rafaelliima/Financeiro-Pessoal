@@ -63,7 +63,22 @@ object DataMigrator {
             fileVersion = 10
         }
 
+        if (fileVersion < 11) {
+            currentObject = migrateV10ToV11(currentObject)
+            fileVersion = 11
+        }
+
         return currentObject
+    }
+
+    private fun migrateV10ToV11(oldJson: JSONObject): JSONObject {
+        val migratedJson = JSONObject(oldJson.toString())
+        migratedJson.put("version", 11)
+
+        // Migração removida pois voltamos a usar os nomes com 'is'
+        // e adicionamos PropertyName para Firestore.
+
+        return migratedJson
     }
 
     private fun migrateV0ToV1(oldJson: JSONObject): JSONObject {
@@ -221,49 +236,29 @@ object DataMigrator {
     }
 
     private fun migrateV6ToV7(oldJson: JSONObject): JSONObject {
+        // Migração de "emailSyncState" removida junto com a funcionalidade de
+        // importação automática via Gmail. Mantida como no-op apenas para não
+        // quebrar a sequência de versões de arquivos já migrados.
         val migratedJson = JSONObject(oldJson.toString())
         migratedJson.put("version", 7)
-        if (!migratedJson.has("emailSyncState")) {
-            val syncJson = JSONObject().apply {
-                put("processedMessageIds", JSONArray())
-                put("totalEmailsFound", 0)
-                put("totalEmailsProcessed", 0)
-                put("scopeGranted", false)
-                put("statusMessage", "Não testado")
-            }
-            migratedJson.put("emailSyncState", syncJson)
-        }
         return migratedJson
     }
 
     private fun migrateV7ToV8(oldJson: JSONObject): JSONObject {
         val migratedJson = JSONObject(oldJson.toString())
         migratedJson.put("version", 8)
-        val syncObj = migratedJson.optJSONObject("emailSyncState")
-        if (syncObj != null) {
-            if (!syncObj.has("totalImported")) syncObj.put("totalImported", 0)
-            if (!syncObj.has("totalIgnored")) syncObj.put("totalIgnored", 0)
-        }
         return migratedJson
     }
 
     private fun migrateV8ToV9(oldJson: JSONObject): JSONObject {
         val migratedJson = JSONObject(oldJson.toString())
         migratedJson.put("version", 9)
-        val syncObj = migratedJson.optJSONObject("emailSyncState")
-        if (syncObj != null && !syncObj.has("lastError")) {
-            syncObj.put("lastError", JSONObject.NULL)
-        }
         return migratedJson
     }
 
     private fun migrateV9ToV10(oldJson: JSONObject): JSONObject {
         val migratedJson = JSONObject(oldJson.toString())
         migratedJson.put("version", 10)
-        val syncObj = migratedJson.optJSONObject("emailSyncState")
-        if (syncObj != null && !syncObj.has("diagnosticLogs")) {
-            syncObj.put("diagnosticLogs", JSONArray())
-        }
         return migratedJson
     }
 }

@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,8 +27,11 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -62,13 +66,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.data.CardPaymentItem
 import com.example.data.DailyExpense
 import com.example.data.DataSource
+import com.example.data.PaymentMethod
+import com.example.data.PurchaseItem
+import com.example.data.CardItem
+import com.example.data.InstallmentCalculation
 import com.example.ui.components.EmptyStateCard
 import com.example.ui.components.StatusFeedbackBanner
 import com.example.ui.theme.DividerColor
@@ -79,117 +89,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.UUID
-
-data class PurchaseItem(
-    val id: String = UUID.randomUUID().toString(),
-    val name: String,
-    val totalAmount: Double,
-    val cardId: String,
-    val cardName: String,
-    val isInstallment: Boolean,
-    val totalInstallments: Int = 1,
-    val startMonth: Int = 1,
-    val startYear: Int = 2026,
-    val paidInstallmentsCount: Int = 0,
-    val isQuitada: Boolean = false,
-    val completedAt: String? = null,
-    val source: DataSource = DataSource.MANUAL,
-    val createdAt: String? = null,
-    val updatedAt: String? = null
-) {
-    fun getFormattedCompletionDate(): String? {
-        if (completedAt.isNullOrBlank()) return null
-        return try {
-            val parts = completedAt.split("-")
-            if (parts.size >= 2) {
-                val year = parts[0]
-                val monthInt = parts[1].toIntOrNull() ?: 1
-                val cal = Calendar.getInstance()
-                cal.set(Calendar.MONTH, monthInt - 1)
-                val monthName = SimpleDateFormat("MMM", Locale("pt", "BR")).format(cal.time)
-                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale("pt", "BR")) else it.toString() }
-                "$monthName/$year"
-            } else null
-        } catch (_: Exception) {
-            null
-        }
-    }
-}
-
-data class InstallmentCalculation(
-    val currentInstallment: Int,
-    val totalInstallments: Int,
-    val paidInstallments: Int,
-    val remainingInstallments: Int,
-    val installmentValue: Double,
-    val status: String // "Em andamento" or "Quitado"
-)
-
-fun PurchaseItem.calculateInstallments(
-    currentMonth: Int = Calendar.getInstance().get(Calendar.MONTH) + 1,
-    currentYear: Int = Calendar.getInstance().get(Calendar.YEAR)
-): InstallmentCalculation {
-    val instVal = if (totalInstallments > 0) totalAmount / totalInstallments else totalAmount
-
-    if (isQuitada) {
-        return InstallmentCalculation(
-            currentInstallment = totalInstallments,
-            totalInstallments = totalInstallments,
-            paidInstallments = totalInstallments,
-            remainingInstallments = 0,
-            installmentValue = instVal,
-            status = "Quitado"
-        )
-    }
-
-    if (!isInstallment || totalInstallments <= 1) {
-        val startTotalMonths = startYear * 12 + (startMonth - 1)
-        val currentTotalMonths = currentYear * 12 + (currentMonth - 1)
-        val isPaid = currentTotalMonths >= startTotalMonths || paidInstallmentsCount >= 1
-        return InstallmentCalculation(
-            currentInstallment = 1,
-            totalInstallments = 1,
-            paidInstallments = if (isPaid) 1 else 0,
-            remainingInstallments = if (isPaid) 0 else 1,
-            installmentValue = totalAmount,
-            status = if (isPaid) "Quitado" else "Em andamento"
-        )
-    }
-
-    val startTotalMonths = startYear * 12 + (startMonth - 1)
-    val currentTotalMonths = currentYear * 12 + (currentMonth - 1)
-    val monthsDiff = maxOf(0, currentTotalMonths - startTotalMonths)
-    val effectivePaid = maxOf(paidInstallmentsCount, monthsDiff)
-
-    if (effectivePaid >= totalInstallments) {
-        return InstallmentCalculation(
-            currentInstallment = totalInstallments,
-            totalInstallments = totalInstallments,
-            paidInstallments = totalInstallments,
-            remainingInstallments = 0,
-            installmentValue = instVal,
-            status = "Quitado"
-        )
-    }
-
-    val currInst = effectivePaid + 1
-    val remaining = totalInstallments - effectivePaid
-
-    return InstallmentCalculation(
-        currentInstallment = currInst,
-        totalInstallments = totalInstallments,
-        paidInstallments = effectivePaid,
-        remainingInstallments = remaining,
-        installmentValue = instVal,
-        status = "Em andamento"
-    )
-}
-
-private fun PurchaseItem.isCurrentlyQuitada(): Boolean {
-    if (isQuitada) return true
-    val calc = calculateInstallments()
-    return calc.status == "Quitado" || calc.remainingInstallments == 0 || (totalInstallments > 0 && paidInstallmentsCount >= totalInstallments)
-}
 
 @Composable
 fun PurchasesScreen(
@@ -203,7 +102,7 @@ fun PurchasesScreen(
     isErrorStatus: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    var selectedTabIndex by remember { mutableStateOf(0) } // 0: Cartões, 1: Dia a Dia
+    var selectedTabIndex by remember { mutableStateOf(0) } // 0: Por Cartão, 1: Dia a Dia
     var purchasesFilter by remember { mutableStateOf("Todas") } // "Todas", "Ativas", "Quitadas"
     var isHistoryExpanded by remember { mutableStateOf(false) } // Recolhido por padrão
     var cardForPaymentsHistory by remember { mutableStateOf<CardItem?>(null) }
@@ -244,7 +143,7 @@ fun PurchasesScreen(
                 color = TextPrimary
             )
 
-            // Abas de navegação interna: Cartões vs Dia a Dia
+            // Abas de navegação interna: Por Cartão vs Dia a Dia
             TabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -256,7 +155,7 @@ fun PurchasesScreen(
                     onClick = { selectedTabIndex = 0 },
                     text = {
                         Text(
-                            text = "Cartões",
+                            text = "Por Cartão",
                             fontWeight = if (selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal,
                             style = MaterialTheme.typography.bodyLarge
                         )
@@ -428,10 +327,17 @@ fun PurchasesScreen(
                                                     Column(
                                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                                     ) {
+                                                        val currentCal = Calendar.getInstance()
+                                                        val currentMonth = currentCal.get(Calendar.MONTH) + 1
+                                                        val currentYear = currentCal.get(Calendar.YEAR)
+                                                        val isCardPaidThisMonth = cardPayments.any {
+                                                            it.cardId == linkedCard?.id && it.month == currentMonth && it.year == currentYear && it.paid
+                                                        }
+
                                                         cardPurchases.forEachIndexed { index, purchase ->
                                                             PurchaseRowItem(
                                                                 purchase = purchase,
-                                                                currentFilter = purchasesFilter,
+                                                                isCardPaidThisMonth = isCardPaidThisMonth,
                                                                 onEdit = { purchaseToEdit = purchase },
                                                                 onDelete = { purchaseToDelete = purchase }
                                                             )
@@ -723,12 +629,13 @@ fun PurchasesScreen(
 @Composable
 private fun PurchaseRowItem(
     purchase: PurchaseItem,
-    currentFilter: String = "Todas",
+    isCardPaidThisMonth: Boolean = false,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     val calc = remember(purchase) { purchase.calculateInstallments() }
     val isQuitado = calc.status == "Quitado" || purchase.isQuitada
+    val referenceMonth = remember(purchase) { purchase.getNextInstallmentReference() }
 
     Column(
         modifier = Modifier
@@ -752,20 +659,45 @@ private fun PurchaseRowItem(
                 )
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 2.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.CreditCard,
-                        contentDescription = null,
-                        tint = TextSecondary,
-                        modifier = Modifier.padding(end = 2.dp)
-                    )
-                    Text(
-                        text = purchase.cardName.ifBlank { "Sem cartão" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Outlined.CreditCard,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(14.dp).padding(end = 4.dp)
+                        )
+                        Text(
+                            text = purchase.cardName.ifBlank { "Sem cartão" },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+
+                    if (purchase.isInstallment && !isQuitado) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isCardPaidThisMonth) PrimaryAccent.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isCardPaidThisMonth) Icons.Outlined.CheckCircle else Icons.Outlined.Schedule,
+                                contentDescription = null,
+                                tint = if (isCardPaidThisMonth) PrimaryAccent else TextSecondary,
+                                modifier = Modifier.size(12.dp).padding(end = 4.dp)
+                            )
+                            Text(
+                                text = "Referência: $referenceMonth",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isCardPaidThisMonth) PrimaryAccent else TextSecondary,
+                                fontWeight = if (isCardPaidThisMonth) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1334,6 +1266,32 @@ private fun DailyExpenseRowItem(
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
+                    
+                    // Ícone do Meio de Pagamento
+                    val methodIcon = if (expense.paymentMethod == PaymentMethod.ESPECIE) Icons.Outlined.Payments else Icons.Outlined.AccountBalance
+                    val methodLabel = if (expense.paymentMethod == PaymentMethod.ESPECIE) "Espécie" else "Conta"
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = methodIcon,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = methodLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary
+                        )
+                    }
+
                     if (expense.source != DataSource.MANUAL) {
                         SuggestionChip(
                             onClick = {},
@@ -1412,6 +1370,7 @@ private fun DailyExpenseFormDialog(
         mutableStateOf(initialExpense?.let { String.format(Locale.US, "%.2f", it.value) } ?: "")
     }
     var date by remember { mutableStateOf(initialExpense?.date ?: todayFormatted) }
+    var paymentMethod by remember { mutableStateOf(initialExpense?.paymentMethod ?: PaymentMethod.CONTA) }
     var observation by remember { mutableStateOf(initialExpense?.observation ?: "") }
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -1472,6 +1431,58 @@ private fun DailyExpenseFormDialog(
                         .testTag("daily_expense_date_input")
                 )
 
+                // Meio de Pagamento
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Meio de pagamento:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Opção: Conta
+                        FilterChip(
+                            selected = paymentMethod == PaymentMethod.CONTA,
+                            onClick = { paymentMethod = PaymentMethod.CONTA },
+                            label = { Text("Dinheiro em Conta") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.AccountBalance,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = PrimaryAccent,
+                                selectedLeadingIconColor = PrimaryAccent
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                        // Opção: Espécie
+                        FilterChip(
+                            selected = paymentMethod == PaymentMethod.ESPECIE,
+                            onClick = { paymentMethod = PaymentMethod.ESPECIE },
+                            label = { Text("Espécie") },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Payments,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = PrimaryAccent,
+                                selectedLeadingIconColor = PrimaryAccent
+                            ),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
                 // Observação (opcional)
                 OutlinedTextField(
                     value = observation,
@@ -1518,6 +1529,7 @@ private fun DailyExpenseFormDialog(
                         value = amount,
                         date = date.trim(),
                         source = initialExpense?.source ?: DataSource.MANUAL,
+                        paymentMethod = paymentMethod,
                         observation = observation.trim().ifBlank { null }
                     )
                     onConfirm(finalExpense)

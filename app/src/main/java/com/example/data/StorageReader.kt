@@ -1,8 +1,5 @@
 package com.example.data
 
-import com.example.ui.screens.CardItem
-import com.example.ui.screens.PurchaseItem
-import com.example.ui.screens.SubscriptionItem
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -55,6 +52,7 @@ object StorageReader {
                 val cardObj = cardsArray.optJSONObject(i) ?: continue
                 val id = cardObj.optString("id", UUID.randomUUID().toString())
                 val name = cardObj.optString("name", "")
+                val colorHex = if (cardObj.has("colorHex") && !cardObj.isNull("colorHex")) cardObj.optString("colorHex") else null
                 val sourceStr = cardObj.optString("source", DataSource.MANUAL.name)
                 val createdAt = if (cardObj.has("createdAt")) cardObj.optString("createdAt", null) else null
                 val updatedAt = if (cardObj.has("updatedAt")) cardObj.optString("updatedAt", null) else null
@@ -64,6 +62,7 @@ object StorageReader {
                         CardItem(
                             id = id,
                             name = name,
+                            colorHex = colorHex,
                             source = DataSource.fromString(sourceStr),
                             createdAt = createdAt,
                             updatedAt = updatedAt
@@ -82,12 +81,12 @@ object StorageReader {
                 val totalAmount = pObj.optDouble("totalAmount", 0.0)
                 val cardId = pObj.optString("cardId", "")
                 val cardName = pObj.optString("cardName", "")
-                val isInstallment = pObj.optBoolean("isInstallment", false)
+                val isInstallment = pObj.optBoolean("isInstallment", pObj.optBoolean("installment", false))
                 val totalInstallments = pObj.optInt("totalInstallments", 1)
                 val startMonth = pObj.optInt("startMonth", 1)
                 val startYear = pObj.optInt("startYear", 2026)
                 val paidInstallmentsCount = pObj.optInt("paidInstallmentsCount", 0)
-                val isQuitada = pObj.optBoolean("isQuitada", false)
+                val isQuitada = pObj.optBoolean("isQuitada", pObj.optBoolean("quitada", false))
                 val completedAt = if (pObj.has("completedAt") && !pObj.isNull("completedAt")) pObj.optString("completedAt") else null
                 val sourceStr = pObj.optString("source", DataSource.MANUAL.name)
                 val createdAt = if (pObj.has("createdAt")) pObj.optString("createdAt", null) else null
@@ -183,12 +182,6 @@ object StorageReader {
                 val date = deObj.optString("date", "")
                 val sourceStr = deObj.optString("source", DataSource.MANUAL.name)
                 val observation = if (deObj.has("observation") && !deObj.isNull("observation")) deObj.optString("observation") else null
-                val sourceMessageId = if (deObj.has("sourceMessageId") && !deObj.isNull("sourceMessageId")) deObj.optString("sourceMessageId") else null
-                val emailSubject = if (deObj.has("emailSubject") && !deObj.isNull("emailSubject")) deObj.optString("emailSubject") else null
-                val emailSender = if (deObj.has("emailSender") && !deObj.isNull("emailSender")) deObj.optString("emailSender") else null
-                val providerStr = if (deObj.has("importProvider") && !deObj.isNull("importProvider")) deObj.optString("importProvider") else null
-                val importProvider = ImportProvider.fromString(providerStr)
-                val confidence = if (deObj.has("confidence") && !deObj.isNull("confidence")) deObj.optDouble("confidence", 1.0) else null
                 val createdAt = if (deObj.has("createdAt")) deObj.optString("createdAt", null) else null
                 val updatedAt = if (deObj.has("updatedAt")) deObj.optString("updatedAt", null) else null
 
@@ -201,11 +194,6 @@ object StorageReader {
                             date = date,
                             source = DataSource.fromString(sourceStr),
                             observation = observation,
-                            sourceMessageId = sourceMessageId,
-                            emailSubject = emailSubject,
-                            emailSender = emailSender,
-                            importProvider = importProvider,
-                            confidence = confidence,
                             createdAt = createdAt,
                             updatedAt = updatedAt
                         )
@@ -213,71 +201,18 @@ object StorageReader {
                 }
             }
 
-            // Google Account (Sprint 15, 16, 17 & 18 Real OAuth + Gmail + Auto Expense Import + Diagnostics)
+            // Conta Google (usada apenas para backup/sincronização na nuvem via Firestore)
             val googleObj = jsonObject.optJSONObject("googleAccount")
-            val rootSyncObj = jsonObject.optJSONObject("emailSyncState")
-            val googleSyncObj = googleObj?.optJSONObject("emailSyncState")
-            val syncObj = rootSyncObj ?: googleSyncObj
-
-            val emailSyncState = if (syncObj != null) {
-                val msgIdsArray = syncObj.optJSONArray("processedMessageIds")
-                val processedIds = mutableListOf<String>()
-                if (msgIdsArray != null) {
-                    for (i in 0 until msgIdsArray.length()) {
-                        processedIds.add(msgIdsArray.optString(i))
-                    }
-                }
-                val logsArray = syncObj.optJSONArray("diagnosticLogs")
-                val diagnosticLogsList = mutableListOf<SyncEmailDiagnosticLog>()
-                if (logsArray != null) {
-                    for (i in 0 until logsArray.length()) {
-                        val logObj = logsArray.optJSONObject(i) ?: continue
-                        diagnosticLogsList.add(
-                            SyncEmailDiagnosticLog(
-                                messageId = logObj.optString("messageId", ""),
-                                subject = logObj.optString("subject", ""),
-                                sender = logObj.optString("sender", ""),
-                                date = logObj.optString("date", ""),
-                                snippet = logObj.optString("snippet", ""),
-                                extractedValue = logObj.optString("extractedValue", "não encontrado"),
-                                extractedName = logObj.optString("extractedName", "não encontrado"),
-                                extractedDate = logObj.optString("extractedDate", "não encontrada"),
-                                ignoreReason = if (logObj.has("ignoreReason") && !logObj.isNull("ignoreReason")) logObj.optString("ignoreReason") else null,
-                                finalResult = logObj.optString("finalResult", "Ignorado"),
-                                debugCapturedFragment = if (logObj.has("debugCapturedFragment") && !logObj.isNull("debugCapturedFragment")) logObj.optString("debugCapturedFragment") else null
-                            )
-                        )
-                    }
-                }
-                EmailSyncState(
-                    lastSyncedAt = if (syncObj.has("lastSyncedAt") && !syncObj.isNull("lastSyncedAt")) syncObj.optString("lastSyncedAt") else null,
-                    processedMessageIds = processedIds,
-                    lastHistoryId = if (syncObj.has("lastHistoryId") && !syncObj.isNull("lastHistoryId")) syncObj.optString("lastHistoryId") else null,
-                    totalEmailsFound = syncObj.optInt("totalEmailsFound", 0),
-                    totalEmailsProcessed = syncObj.optInt("totalEmailsProcessed", 0),
-                    totalImported = syncObj.optInt("totalImported", 0),
-                    totalIgnored = syncObj.optInt("totalIgnored", 0),
-                    lastImportedExpense = if (syncObj.has("lastImportedExpense") && !syncObj.isNull("lastImportedExpense")) syncObj.optString("lastImportedExpense") else null,
-                    lastError = if (syncObj.has("lastError") && !syncObj.isNull("lastError")) syncObj.optString("lastError") else null,
-                    scopeGranted = syncObj.optBoolean("scopeGranted", false),
-                    statusMessage = if (syncObj.has("statusMessage") && !syncObj.isNull("statusMessage")) syncObj.optString("statusMessage") else "Não testado",
-                    lastEmailSubject = if (syncObj.has("lastEmailSubject") && !syncObj.isNull("lastEmailSubject")) syncObj.optString("lastEmailSubject") else null,
-                    lastEmailSender = if (syncObj.has("lastEmailSender") && !syncObj.isNull("lastEmailSender")) syncObj.optString("lastEmailSender") else null,
-                    lastEmailDate = if (syncObj.has("lastEmailDate") && !syncObj.isNull("lastEmailDate")) syncObj.optString("lastEmailDate") else null,
-                    diagnosticLogs = diagnosticLogsList
-                )
-            } else null
 
             val googleAccount = if (googleObj != null) {
                 GoogleAccountData(
-                    isConnected = googleObj.optBoolean("isConnected", false),
+                    isConnected = googleObj.optBoolean("isConnected", googleObj.optBoolean("connected", false)),
                     userEmail = if (googleObj.has("userEmail") && !googleObj.isNull("userEmail")) googleObj.optString("userEmail") else null,
                     userName = if (googleObj.has("userName") && !googleObj.isNull("userName")) googleObj.optString("userName") else null,
                     photoUrl = if (googleObj.has("photoUrl") && !googleObj.isNull("photoUrl")) googleObj.optString("photoUrl") else null,
                     connectedAt = if (googleObj.has("connectedAt") && !googleObj.isNull("connectedAt")) googleObj.optString("connectedAt") else null,
                     accountId = if (googleObj.has("accountId") && !googleObj.isNull("accountId")) googleObj.optString("accountId") else null,
-                    idToken = if (googleObj.has("idToken") && !googleObj.isNull("idToken")) googleObj.optString("idToken") else null,
-                    emailSyncState = emailSyncState
+                    idToken = if (googleObj.has("idToken") && !googleObj.isNull("idToken")) googleObj.optString("idToken") else null
                 )
             } else null
 
@@ -288,8 +223,7 @@ object StorageReader {
                 subscriptions = subscriptionsList,
                 cardPayments = cardPaymentsList,
                 dailyExpenses = dailyExpensesList,
-                googleAccount = googleAccount,
-                emailSyncState = emailSyncState
+                googleAccount = googleAccount
             )
 
             StorageOperationResult(

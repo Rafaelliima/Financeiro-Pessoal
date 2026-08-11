@@ -25,6 +25,7 @@ object AtomicFileWriter {
                     cardsArray.put(JSONObject().apply {
                         put("id", card.id)
                         put("name", card.name)
+                        card.colorHex?.let { put("colorHex", it) }
                         put("source", card.source.name)
                         card.createdAt?.let { put("createdAt", it) }
                         card.updatedAt?.let { put("updatedAt", it) }
@@ -94,60 +95,15 @@ object AtomicFileWriter {
                         put("value", de.value)
                         put("date", de.date)
                         put("source", de.source.name)
+                        put("paymentMethod", de.paymentMethod.name)
                         de.observation?.let { put("observation", it) }
-                        de.sourceMessageId?.let { put("sourceMessageId", it) }
-                        de.emailSubject?.let { put("emailSubject", it) }
-                        de.emailSender?.let { put("emailSender", it) }
-                        de.importProvider?.let { put("importProvider", it.name) }
-                        de.confidence?.let { put("confidence", it) }
                         de.createdAt?.let { put("createdAt", it) }
                         de.updatedAt?.let { put("updatedAt", it) }
                     })
                 }
                 put("dailyExpenses", dailyExpensesArray)
 
-                // Google Account (Sprint 15, 16, 17 & 18 Real OAuth + Gmail + Auto Expense Import + Diagnostics)
-                val activeSyncState = data.emailSyncState ?: data.googleAccount?.emailSyncState
-
-                fun buildSyncJson(sync: EmailSyncState): JSONObject {
-                    return JSONObject().apply {
-                        sync.lastSyncedAt?.let { put("lastSyncedAt", it) }
-                        val idsArray = JSONArray()
-                        sync.processedMessageIds.forEach { idsArray.put(it) }
-                        put("processedMessageIds", idsArray)
-                        sync.lastHistoryId?.let { put("lastHistoryId", it) }
-                        put("totalEmailsFound", sync.totalEmailsFound)
-                        put("totalEmailsProcessed", sync.totalEmailsProcessed)
-                        put("totalImported", sync.totalImported)
-                        put("totalIgnored", sync.totalIgnored)
-                        sync.lastImportedExpense?.let { put("lastImportedExpense", it) }
-                        sync.lastError?.let { put("lastError", it) }
-                        put("scopeGranted", sync.scopeGranted)
-                        sync.statusMessage?.let { put("statusMessage", it) }
-                        sync.lastEmailSubject?.let { put("lastEmailSubject", it) }
-                        sync.lastEmailSender?.let { put("lastEmailSender", it) }
-                        sync.lastEmailDate?.let { put("lastEmailDate", it) }
-
-                        val logsArray = JSONArray()
-                        sync.diagnosticLogs.forEach { log ->
-                            logsArray.put(JSONObject().apply {
-                                put("messageId", log.messageId)
-                                put("subject", log.subject)
-                                put("sender", log.sender)
-                                put("date", log.date)
-                                put("snippet", log.snippet)
-                                put("extractedValue", log.extractedValue)
-                                put("extractedName", log.extractedName)
-                                put("extractedDate", log.extractedDate)
-                                log.ignoreReason?.let { put("ignoreReason", it) }
-                                put("finalResult", log.finalResult)
-                                log.debugCapturedFragment?.let { put("debugCapturedFragment", it) }
-                            })
-                        }
-                        put("diagnosticLogs", logsArray)
-                    }
-                }
-
+                // Conta Google (usada apenas para backup/sincronização na nuvem via Firestore)
                 data.googleAccount?.let { acc ->
                     put("googleAccount", JSONObject().apply {
                         put("isConnected", acc.isConnected)
@@ -157,15 +113,7 @@ object AtomicFileWriter {
                         acc.connectedAt?.let { put("connectedAt", it) }
                         acc.accountId?.let { put("accountId", it) }
                         acc.idToken?.let { put("idToken", it) }
-                        val syncToSave = acc.emailSyncState ?: activeSyncState
-                        syncToSave?.let { sync ->
-                            put("emailSyncState", buildSyncJson(sync))
-                        }
                     })
-                }
-
-                activeSyncState?.let { sync ->
-                    put("emailSyncState", buildSyncJson(sync))
                 }
 
                 // Coleções de expansão futura
