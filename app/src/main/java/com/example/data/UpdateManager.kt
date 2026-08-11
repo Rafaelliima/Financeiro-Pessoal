@@ -89,31 +89,62 @@ class UpdateManager(private val context: Context) {
      * Inicia o download do APK via DownloadManager.
      */
     fun downloadAndInstallApk(apkUrl: String) {
-        val destination = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
-        if (destination.exists()) destination.delete()
+        val fileName = "update_${System.currentTimeMillis()}.apk"
+        val destination = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
+        
+        // Limpa downloads anteriores para economizar espaço
+        context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.listFiles()?.forEach { 
+            if (it.name.startsWith("update_") && it.name.endsWith(".apk")) it.delete() 
+        }
 
         val request = DownloadManager.Request(Uri.parse(apkUrl))
             .setTitle("Atualizando Financeiro Pessoal")
             .setDescription("Baixando nova versão...")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationUri(Uri.fromFile(destination))
+            .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(true)
 
         val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = manager.enqueue(request)
+
+        Log.d(TAG, "Download enfileirado com ID: $downloadId. Destino: ${destination.absolutePath}")
 
         // Registra um receiver para saber quando o download terminar e abrir o instalador
         val onComplete = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
                 if (id == downloadId) {
-                    installApk(destination)
+                    val query = DownloadManager.Query().setFilterById(downloadId)
+                    val cursor = manager.query(query)
+                    if (cursor.moveToFirst()) {
+                        val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                        if (statusIndex != -1) {
+                            val status = cursor.getInt(statusIndex)
+                            if (status == DownloadManager.STATUS_SUCCESSFUL) {
+                                Log.i(TAG, "Download concluído com sucesso. Iniciando instalação...")
+                                installApk(destination)
+                            } else {
+                                val reasonIndex = cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
+                                val reason = if (reasonIndex != -1) cursor.getInt(reasonIndex) else -1
+                                Log.e(TAG, "Download falhou. Status: $status, Razão: $reason")
+                            }
+                        }
+                    }
+                    cursor.close()
                     context.unregisterReceiver(this)
                 }
             }
         }
         
+        // IMPORTANTE: Para receber o sinal do DownloadManager no Android 14+, 
+        // o receiver deve ser registrado como EXPORTED.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(onComplete, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_NOT_EXPORTED)
+            context.registerReceiver(
+                onComplete, 
+                IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), 
+                Context.RECEIVER_EXPORTED
+            )
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             context.registerReceiver(onComplete, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE))
