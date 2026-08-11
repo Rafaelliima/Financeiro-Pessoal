@@ -89,26 +89,36 @@ class UpdateManager(private val context: Context) {
      * Inicia o download do APK via DownloadManager.
      */
     fun downloadAndInstallApk(apkUrl: String) {
+        val cleanUrl = apkUrl.trim()
+        if (cleanUrl.isEmpty()) {
+            Log.e(TAG, "URL de download está vazia!")
+            return
+        }
+
         val fileName = "update_${System.currentTimeMillis()}.apk"
-        val destination = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
+        val downloadDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+        if (downloadDir?.exists() == false) downloadDir.mkdirs()
+        
+        val destination = File(downloadDir, fileName)
         
         // Limpa downloads anteriores para economizar espaço
-        context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.listFiles()?.forEach { 
+        downloadDir?.listFiles()?.forEach { 
             if (it.name.startsWith("update_") && it.name.endsWith(".apk")) it.delete() 
         }
 
-        val request = DownloadManager.Request(Uri.parse(apkUrl))
+        val request = DownloadManager.Request(Uri.parse(cleanUrl))
             .setTitle("Atualizando Financeiro Pessoal")
-            .setDescription("Baixando nova versão...")
+            .setDescription("Baixando nova versão do GitHub...")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
             .setAllowedOverMetered(true)
             .setAllowedOverRoaming(true)
+            .addRequestHeader("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36")
 
         val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = manager.enqueue(request)
 
-        Log.d(TAG, "Download enfileirado com ID: $downloadId. Destino: ${destination.absolutePath}")
+        Log.d(TAG, "Download enfileirado com ID: $downloadId. URL: $cleanUrl")
 
         // Registra um receiver para saber quando o download terminar e abrir o instalador
         val onComplete = object : BroadcastReceiver() {
