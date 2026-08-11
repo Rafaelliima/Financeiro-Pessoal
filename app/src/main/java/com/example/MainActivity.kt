@@ -215,7 +215,9 @@ fun MainAppStructure() {
         }
         
         // 4. Verifica atualizações em segundo plano
-        updateInfo = updateManager.checkForUpdate()
+        val info = updateManager.checkForUpdate()
+        Log.d("UpdateCheck", "Resultado da verificação: $info")
+        updateInfo = info
 
         isLoading = false
     }
