@@ -11,15 +11,16 @@ import android.os.Environment
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.google.firebase.firestore.PropertyName
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import java.io.File
 
 data class AppVersionInfo(
-    val latestVersionCode: Int = 0,
-    val latestVersionName: String = "",
-    val apkUrl: String = "",
-    val releaseNotes: String = ""
+    @get:PropertyName("latestVersionCode") @set:PropertyName("latestVersionCode") var latestVersionCode: Long = 0,
+    @get:PropertyName("latestVersionName") @set:PropertyName("latestVersionName") var latestVersionName: String = "",
+    @get:PropertyName("apkUrl") @set:PropertyName("apkUrl") var apkUrl: String = "",
+    @get:PropertyName("releaseNotes") @set:PropertyName("releaseNotes") var releaseNotes: String = ""
 )
 
 class UpdateManager(private val context: Context) {
@@ -34,16 +35,27 @@ class UpdateManager(private val context: Context) {
             Log.d(TAG, "Iniciando consulta ao Firestore em config/app_version...")
             val doc = db.collection("config").document("app_version").get().await()
             if (doc.exists()) {
-                val info = doc.toObject(AppVersionInfo::class.java)
+                val data = doc.data
+                Log.d(TAG, "Dados brutos do Firestore: $data")
+
+                // Busca os valores manualmente tratando possíveis espaços nos nomes dos campos ou erros de tipo
+                val cloudCode = (data?.get("latestVersionCode") as? Long) 
+                    ?: (data?.get(" latestVersionCode") as? Long) // Tenta com o espaço que apareceu no log
+                    ?: 0L
+                
+                val cloudName = (data?.get("latestVersionName") as? String) ?: ""
+                val cloudUrl = (data?.get("apkUrl") as? String) ?: ""
+                val cloudNotes = (data?.get("releaseNotes") as? String) ?: ""
+
+                val info = AppVersionInfo(cloudCode, cloudName, cloudUrl, cloudNotes)
                 val currentVersionCode = getInternalVersionCode()
                 
-                Log.d(TAG, "Documento encontrado! Versão na Nuvem: ${info?.latestVersionCode}, Versão no Celular: $currentVersionCode")
+                Log.d(TAG, "Comparando: Nuvem($cloudCode) vs Celular($currentVersionCode)")
 
-                if (info != null && info.latestVersionCode > currentVersionCode) {
-                    Log.i(TAG, "Nova versão disponível: ${info.latestVersionName}")
+                if (info.latestVersionCode > currentVersionCode) {
+                    Log.i(TAG, "Nova versão detectada!")
                     info
                 } else {
-                    Log.d(TAG, "App já está atualizado ou info é nula.")
                     null
                 }
             } else {
