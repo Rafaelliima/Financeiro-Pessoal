@@ -29,7 +29,8 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.Payments
-import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -45,6 +46,18 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.material3.SheetState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -85,24 +98,35 @@ import com.example.ui.theme.DividerColor
 import com.example.ui.theme.PrimaryAccent
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.SuccessGreen
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.UUID
 
+import androidx.compose.material.icons.outlined.Repeat
+import com.example.data.SubscriptionItem
+import androidx.compose.foundation.layout.IntrinsicSize
+
+import androidx.compose.foundation.BorderStroke
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PurchasesScreen(
     purchases: List<PurchaseItem>,
     cards: List<CardItem>,
     cardPayments: List<CardPaymentItem> = emptyList(),
     dailyExpenses: List<DailyExpense> = emptyList(),
+    subscriptions: List<SubscriptionItem> = emptyList(),
     onUpdatePurchases: (List<PurchaseItem>) -> Unit,
     onUpdateDailyExpenses: (List<DailyExpense>) -> Unit = {},
+    onUpdateSubscriptions: (List<SubscriptionItem>) -> Unit = {},
+    onRegisterInvoicePayment: (CardItem) -> Unit = {},
     statusMessage: String? = null,
     isErrorStatus: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    var selectedTabIndex by remember { mutableStateOf(0) } // 0: Por Cartão, 1: Dia a Dia
+    var selectedTabIndex by remember { mutableStateOf(0) } // 0: Por Cartão, 1: Dia a Dia, 2: Assinatura
     var purchasesFilter by remember { mutableStateOf("Todas") } // "Todas", "Ativas", "Quitadas"
     var isHistoryExpanded by remember { mutableStateOf(false) } // Recolhido por padrão
     var cardForPaymentsHistory by remember { mutableStateOf<CardItem?>(null) }
@@ -115,6 +139,15 @@ fun PurchasesScreen(
     var showAddDailyExpenseDialog by remember { mutableStateOf(false) }
     var dailyExpenseToEdit by remember { mutableStateOf<DailyExpense?>(null) }
     var dailyExpenseToDelete by remember { mutableStateOf<DailyExpense?>(null) }
+
+    var showAddSubscriptionDialog by remember { mutableStateOf(false) }
+    var subscriptionToEdit by remember { mutableStateOf<SubscriptionItem?>(null) }
+    var subscriptionToDelete by remember { mutableStateOf<SubscriptionItem?>(null) }
+
+    val scope = rememberCoroutineScope()
+    val purchaseSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val expenseSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val subscriptionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val activePurchases = remember(purchases) {
         purchases.filter { !it.isCurrentlyQuitada() }
@@ -140,10 +173,10 @@ fun PurchasesScreen(
             Text(
                 text = "Despesas e Compras",
                 style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary
+                color = MaterialTheme.colorScheme.onBackground
             )
 
-            // Abas de navegação interna: Por Cartão vs Dia a Dia
+            // Abas de navegação interna: Por Cartão vs Dia a Dia vs Assinatura
             TabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surface,
@@ -173,6 +206,18 @@ fun PurchasesScreen(
                         )
                     },
                     modifier = Modifier.testTag("tab_dia_a_dia")
+                )
+                Tab(
+                    selected = selectedTabIndex == 2,
+                    onClick = { selectedTabIndex = 2 },
+                    text = {
+                        Text(
+                            text = "Assinatura",
+                            fontWeight = if (selectedTabIndex == 2) FontWeight.Bold else FontWeight.Normal,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    },
+                    modifier = Modifier.testTag("tab_assinaturas")
                 )
             }
 
@@ -251,16 +296,18 @@ fun PurchasesScreen(
                                         Card(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(vertical = 4.dp)
+                                                .padding(vertical = 6.dp)
                                                 .animateContentSize(),
+                                            shape = RoundedCornerShape(24.dp),
                                             colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                            )
+                                                containerColor = MaterialTheme.colorScheme.surface
+                                            ),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                         ) {
                                             Column(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(16.dp)
+                                                    .padding(20.dp)
                                             ) {
                                                 Row(
                                                     modifier = Modifier
@@ -273,25 +320,33 @@ fun PurchasesScreen(
                                                 ) {
                                                     Row(
                                                         verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                                                         modifier = Modifier.weight(1f)
                                                     ) {
-                                                        Icon(
-                                                            imageVector = Icons.Outlined.CreditCard,
-                                                            contentDescription = null,
-                                                            tint = PrimaryAccent
-                                                        )
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(44.dp)
+                                                                .clip(RoundedCornerShape(12.dp))
+                                                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Outlined.CreditCard,
+                                                                contentDescription = null,
+                                                                tint = MaterialTheme.colorScheme.primary
+                                                            )
+                                                        }
                                                         Column {
                                                             Text(
                                                                 text = cardName,
                                                                 style = MaterialTheme.typography.titleMedium,
-                                                                color = TextPrimary,
+                                                                color = MaterialTheme.colorScheme.onSurface,
                                                                 fontWeight = FontWeight.Bold
                                                             )
                                                             Text(
                                                                 text = "${cardPurchases.size} compra${if (cardPurchases.size > 1) "s" else ""} • R$ ${String.format(Locale("pt", "BR"), "%.2f", cardMonthlyTotal)} /mês",
-                                                                style = MaterialTheme.typography.bodyMedium,
-                                                                color = TextSecondary
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                                             )
                                                         }
                                                     }
@@ -305,24 +360,26 @@ fun PurchasesScreen(
                                                                 Icon(
                                                                     imageVector = Icons.Outlined.History,
                                                                     contentDescription = "Histórico de faturas",
-                                                                    tint = TextSecondary
+                                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                                                 )
                                                             }
                                                         }
 
                                                         Icon(
-                                                            imageVector = if (isExpanded) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowRight,
+                                                            imageVector = if (isExpanded) Icons.Outlined.KeyboardArrowDown else Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                                                             contentDescription = if (isExpanded) "Recolher" else "Expandir",
-                                                            tint = TextPrimary
+                                                            tint = MaterialTheme.colorScheme.onSurface,
+                                                            modifier = Modifier.size(20.dp)
                                                         )
                                                     }
                                                 }
 
                                                 if (isExpanded) {
+                                                    Spacer(modifier = Modifier.height(16.dp))
                                                     HorizontalDivider(
-                                                        modifier = Modifier.padding(vertical = 12.dp),
-                                                        color = DividerColor
+                                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                                                     )
+                                                    Spacer(modifier = Modifier.height(12.dp))
 
                                                     Column(
                                                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -342,7 +399,42 @@ fun PurchasesScreen(
                                                                 onDelete = { purchaseToDelete = purchase }
                                                             )
                                                             if (index < cardPurchases.size - 1) {
-                                                                HorizontalDivider(color = DividerColor)
+                                                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                                                            }
+                                                        }
+
+                                                        if (linkedCard != null) {
+                                                            Spacer(modifier = Modifier.height(12.dp))
+                                                            Button(
+                                                                onClick = { onRegisterInvoicePayment(linkedCard) },
+                                                                enabled = !isCardPaidThisMonth,
+                                                                colors = ButtonDefaults.buttonColors(
+                                                                    containerColor = if (isCardPaidThisMonth) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary,
+                                                                    contentColor = if (isCardPaidThisMonth) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
+                                                                ),
+                                                                shape = RoundedCornerShape(12.dp),
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .height(48.dp)
+                                                                    .testTag("pay_invoice_button_${linkedCard.id}")
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = if (isCardPaidThisMonth) Icons.Outlined.CheckCircle else Icons.Outlined.Payments,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.size(20.dp)
+                                                                )
+                                                                Spacer(modifier = Modifier.size(10.dp))
+                                                                val monthName = remember(currentMonth) {
+                                                                    val cal = Calendar.getInstance()
+                                                                    cal.set(Calendar.MONTH, currentMonth - 1)
+                                                                    SimpleDateFormat("MMMM", Locale("pt", "BR")).format(cal.time)
+                                                                        .replaceFirstChar { it.uppercase() }
+                                                                }
+                                                                Text(
+                                                                    text = if (isCardPaidThisMonth) "Fatura de $monthName Paga" else "Pagar Fatura de $monthName",
+                                                                    style = MaterialTheme.typography.bodyLarge,
+                                                                    fontWeight = FontWeight.Bold
+                                                                )
                                                             }
                                                         }
                                                     }
@@ -382,15 +474,15 @@ fun PurchasesScreen(
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             Icon(
-                                                imageVector = if (expanded) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowRight,
+                                                imageVector = if (expanded) Icons.Outlined.KeyboardArrowDown else Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                                                 contentDescription = null,
-                                                tint = TextPrimary
+                                                tint = MaterialTheme.colorScheme.onBackground
                                             )
                                             Text(
                                                 text = "Histórico",
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = TextPrimary
+                                                color = MaterialTheme.colorScheme.onBackground
                                             )
                                             SuggestionChip(
                                                 onClick = {},
@@ -436,11 +528,11 @@ fun PurchasesScreen(
                         }
                     }
                 }
-            } else {
+            } else if (selectedTabIndex == 1) {
                 // Conteúdo da Aba 1: Dia a Dia
                 if (dailyExpenses.isEmpty()) {
                     EmptyStateCard(
-                        icon = Icons.Outlined.ReceiptLong,
+                        icon = Icons.AutoMirrored.Outlined.ReceiptLong,
                         title = "Nenhum gasto diário registrado",
                         description = "Clique no botão abaixo para cadastrar um novo gasto do dia a dia."
                     )
@@ -462,16 +554,41 @@ fun PurchasesScreen(
                         }
                     }
                 }
+            } else {
+                // Conteúdo da Aba 2: Assinatura
+                if (subscriptions.isEmpty()) {
+                    EmptyStateCard(
+                        icon = Icons.Outlined.Repeat,
+                        title = "Nenhuma assinatura cadastrada",
+                        description = "Clique no botão abaixo para cadastrar um serviço recorrente."
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(bottom = 88.dp)
+                    ) {
+                        itemsIndexed(subscriptions, key = { _, sub -> sub.id }) { index, sub ->
+                            SubscriptionRowItem(
+                                subscription = sub,
+                                onEdit = { subscriptionToEdit = sub },
+                                onDelete = { subscriptionToDelete = sub }
+                            )
+                            if (index < subscriptions.size - 1) {
+                                HorizontalDivider(color = DividerColor)
+                            }
+                        }
+                    }
+                }
             }
         }
 
         // FAB Único e Adaptável conforme a aba selecionada
         ExtendedFloatingActionButton(
             onClick = {
-                if (selectedTabIndex == 0) {
-                    showAddPurchaseDialog = true
-                } else {
-                    showAddDailyExpenseDialog = true
+                when (selectedTabIndex) {
+                    0 -> showAddPurchaseDialog = true
+                    1 -> showAddDailyExpenseDialog = true
+                    2 -> showAddSubscriptionDialog = true
                 }
             },
             icon = {
@@ -482,7 +599,12 @@ fun PurchasesScreen(
             },
             text = {
                 Text(
-                    text = if (selectedTabIndex == 0) "Cadastrar Compra" else "Cadastrar Gasto",
+                    text = when (selectedTabIndex) {
+                        0 -> "Cadastrar Compra"
+                        1 -> "Cadastrar Gasto"
+                        2 -> "Cadastrar Assin."
+                        else -> "Cadastrar"
+                    },
                     fontWeight = FontWeight.Bold
                 )
             },
@@ -491,42 +613,118 @@ fun PurchasesScreen(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
-                .testTag(if (selectedTabIndex == 0) "add_purchase_button" else "add_daily_expense_button")
+                .testTag("universal_add_button")
         )
     }
 
-    // Add Purchase Dialog
-    if (showAddPurchaseDialog) {
-        PurchaseFormDialog(
-            title = "Nova Compra",
-            availableCards = cards,
-            initialPurchase = null,
-            onDismiss = { showAddPurchaseDialog = false },
-            onConfirm = { newPurchase ->
-                onUpdatePurchases(purchases + newPurchase)
+    // Add Purchase Sheet
+    if (showAddPurchaseDialog || purchaseToEdit != null) {
+        ModalBottomSheet(
+            onDismissRequest = { 
                 showAddPurchaseDialog = false
-            }
-        )
-    }
-
-    // Edit Purchase Dialog
-    purchaseToEdit?.let { purchase ->
-        PurchaseFormDialog(
-            title = "Editar Compra",
-            availableCards = cards,
-            initialPurchase = purchase,
-            onDismiss = { purchaseToEdit = null },
-            onConfirm = { updatedPurchase ->
-                val updatedList = purchases.map {
-                    if (it.id == purchase.id) updatedPurchase else it
-                }
-                onUpdatePurchases(updatedList)
                 purchaseToEdit = null
-            }
-        )
+            },
+            sheetState = purchaseSheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            PurchaseFormContent(
+                title = if (purchaseToEdit != null) "Editar Compra" else "Nova Compra",
+                availableCards = cards,
+                initialPurchase = purchaseToEdit,
+                onDismiss = {
+                    scope.launch { purchaseSheetState.hide() }.invokeOnCompletion {
+                        showAddPurchaseDialog = false
+                        purchaseToEdit = null
+                    }
+                },
+                onConfirm = { purchase ->
+                    if (purchaseToEdit != null) {
+                        onUpdatePurchases(purchases.map { if (it.id == purchase.id) purchase else it })
+                    } else {
+                        onUpdatePurchases(purchases + purchase)
+                    }
+                    scope.launch { purchaseSheetState.hide() }.invokeOnCompletion {
+                        showAddPurchaseDialog = false
+                        purchaseToEdit = null
+                    }
+                }
+            )
+        }
     }
 
-    // Delete Purchase Dialog
+    // Add Daily Expense Sheet
+    if (showAddDailyExpenseDialog || dailyExpenseToEdit != null) {
+        ModalBottomSheet(
+            onDismissRequest = { 
+                showAddDailyExpenseDialog = false
+                dailyExpenseToEdit = null
+            },
+            sheetState = expenseSheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            DailyExpenseFormContent(
+                title = if (dailyExpenseToEdit != null) "Editar Gasto" else "Novo Gasto Diário",
+                initialExpense = dailyExpenseToEdit,
+                onDismiss = {
+                    scope.launch { expenseSheetState.hide() }.invokeOnCompletion {
+                        showAddDailyExpenseDialog = false
+                        dailyExpenseToEdit = null
+                    }
+                },
+                onConfirm = { expense ->
+                    if (dailyExpenseToEdit != null) {
+                        onUpdateDailyExpenses(dailyExpenses.map { if (it.id == expense.id) expense else it })
+                    } else {
+                        onUpdateDailyExpenses(dailyExpenses + expense)
+                    }
+                    scope.launch { expenseSheetState.hide() }.invokeOnCompletion {
+                        showAddDailyExpenseDialog = false
+                        dailyExpenseToEdit = null
+                    }
+                }
+            )
+        }
+    }
+
+    // Add Subscription Sheet
+    if (showAddSubscriptionDialog || subscriptionToEdit != null) {
+        ModalBottomSheet(
+            onDismissRequest = { 
+                showAddSubscriptionDialog = false
+                subscriptionToEdit = null
+            },
+            sheetState = subscriptionSheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            SubscriptionFormContent(
+                title = if (subscriptionToEdit != null) "Editar Assinatura" else "Nova Assinatura",
+                availableCards = cards,
+                initialSubscription = subscriptionToEdit,
+                onDismiss = {
+                    scope.launch { subscriptionSheetState.hide() }.invokeOnCompletion {
+                        showAddSubscriptionDialog = false
+                        subscriptionToEdit = null
+                    }
+                },
+                onConfirm = { sub ->
+                    if (subscriptionToEdit != null) {
+                        onUpdateSubscriptions(subscriptions.map { if (it.id == sub.id) sub else it })
+                    } else {
+                        onUpdateSubscriptions(subscriptions + sub)
+                    }
+                    scope.launch { subscriptionSheetState.hide() }.invokeOnCompletion {
+                        showAddSubscriptionDialog = false
+                        subscriptionToEdit = null
+                    }
+                }
+            )
+        }
+    }
+
+    // Delete Confirmation Dialogs
     purchaseToDelete?.let { purchase ->
         AlertDialog(
             onDismissRequest = { purchaseToDelete = null },
@@ -556,36 +754,6 @@ fun PurchasesScreen(
         )
     }
 
-    // Add Daily Expense Dialog
-    if (showAddDailyExpenseDialog) {
-        DailyExpenseFormDialog(
-            title = "Novo Gasto Diário",
-            initialExpense = null,
-            onDismiss = { showAddDailyExpenseDialog = false },
-            onConfirm = { newExpense ->
-                onUpdateDailyExpenses(dailyExpenses + newExpense)
-                showAddDailyExpenseDialog = false
-            }
-        )
-    }
-
-    // Edit Daily Expense Dialog
-    dailyExpenseToEdit?.let { expense ->
-        DailyExpenseFormDialog(
-            title = "Editar Gasto Diário",
-            initialExpense = expense,
-            onDismiss = { dailyExpenseToEdit = null },
-            onConfirm = { updatedExpense ->
-                val updatedList = dailyExpenses.map {
-                    if (it.id == expense.id) updatedExpense else it
-                }
-                onUpdateDailyExpenses(updatedList)
-                dailyExpenseToEdit = null
-            }
-        )
-    }
-
-    // Delete Daily Expense Dialog
     dailyExpenseToDelete?.let { expense ->
         AlertDialog(
             onDismissRequest = { dailyExpenseToDelete = null },
@@ -615,6 +783,35 @@ fun PurchasesScreen(
         )
     }
 
+    subscriptionToDelete?.let { sub ->
+        AlertDialog(
+            onDismissRequest = { subscriptionToDelete = null },
+            title = { Text("Excluir Assinatura", style = MaterialTheme.typography.titleMedium) },
+            text = { Text("Deseja realmente excluir a assinatura \"${sub.name}\"?", style = MaterialTheme.typography.bodyLarge) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val updatedList = subscriptions.filter { it.id != sub.id }
+                        onUpdateSubscriptions(updatedList)
+                        subscriptionToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.testTag("confirm_delete_subscription_button")
+                ) {
+                    Text("Excluir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { subscriptionToDelete = null }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    }
+
     // Card Payments History Dialog
     cardForPaymentsHistory?.let { card ->
         CardPaymentsHistoryDialog(
@@ -637,129 +834,80 @@ private fun PurchaseRowItem(
     val isQuitado = calc.status == "Quitado" || purchase.isQuitada
     val referenceMonth = remember(purchase) { purchase.getNextInstallmentReference() }
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp)
+            .padding(vertical = 10.dp)
             .testTag("purchase_item_${purchase.id}"),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Nome, Cartão e Ações
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = purchase.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Medium
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 2.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.CreditCard,
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(14.dp).padding(end = 4.dp)
-                        )
-                        Text(
-                            text = purchase.cardName.ifBlank { "Sem cartão" },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                    }
-
-                    if (purchase.isInstallment && !isQuitado) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(if (isCardPaidThisMonth) PrimaryAccent.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isCardPaidThisMonth) Icons.Outlined.CheckCircle else Icons.Outlined.Schedule,
-                                contentDescription = null,
-                                tint = if (isCardPaidThisMonth) PrimaryAccent else TextSecondary,
-                                modifier = Modifier.size(12.dp).padding(end = 4.dp)
-                            )
-                            Text(
-                                text = "Referência: $referenceMonth",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isCardPaidThisMonth) PrimaryAccent else TextSecondary,
-                                fontWeight = if (isCardPaidThisMonth) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = purchase.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (purchase.isInstallment && !isQuitado) {
+                    Text(
+                        text = "${calc.currentInstallment}/${calc.totalInstallments}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "•",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
+                Text(
+                    text = if (isQuitado) "Quitada" else if (purchase.isInstallment) "Vence: $referenceMonth" else "À vista",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isCardPaidThisMonth && purchase.isInstallment) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
+        }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = String.format(Locale.forLanguageTag("pt-BR"), "R$ %.2f", if (purchase.isInstallment) calc.installmentValue else purchase.totalAmount),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.testTag("edit_purchase_${purchase.id}")
+                    modifier = Modifier.size(32.dp).testTag("edit_purchase_${purchase.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
-                        contentDescription = "Editar compra",
-                        tint = TextSecondary
+                        contentDescription = "Editar",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.testTag("delete_purchase_${purchase.id}")
+                    modifier = Modifier.size(32.dp).testTag("delete_purchase_${purchase.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Delete,
-                        contentDescription = "Excluir compra",
-                        tint = MaterialTheme.colorScheme.error
+                        contentDescription = "Excluir",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
-            }
-        }
-
-        // Valores e Detalhes
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = String.format(Locale("pt", "BR"), "R$ %.2f", purchase.totalAmount),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = TextPrimary
-                )
-            }
-
-            if (purchase.isInstallment) {
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = if (isQuitado || purchase.isQuitada) "✓ Quitada" else "${calc.currentInstallment}/${calc.totalInstallments} • Restam ${calc.remainingInstallments}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                    Text(
-                        text = String.format(Locale("pt", "BR"), "R$ %.2f /mês", calc.installmentValue),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = TextPrimary
-                    )
-                }
-            } else {
-                Text(
-                    text = "À vista",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
             }
         }
     }
@@ -767,7 +915,7 @@ private fun PurchaseRowItem(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PurchaseFormDialog(
+private fun PurchaseFormContent(
     title: String,
     availableCards: List<CardItem>,
     initialPurchase: PurchaseItem?,
@@ -803,158 +951,180 @@ private fun PurchaseFormDialog(
     var isDropdownExpanded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(20.dp)
+            .imePadding()
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            color = TextPrimary,
+            fontWeight = FontWeight.Bold
+        )
+
+        // Nome
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Nome da compra", style = MaterialTheme.typography.bodySmall) },
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryAccent,
+                focusedLabelColor = PrimaryAccent
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("purchase_name_input")
+        )
+
+        // Valor total
+        OutlinedTextField(
+            value = totalAmountStr,
+            onValueChange = { totalAmountStr = it.replace(',', '.') },
+            label = { Text("Valor total (R$)", style = MaterialTheme.typography.bodySmall) },
+            placeholder = { Text("Ex: 150.00") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryAccent,
+                focusedLabelColor = PrimaryAccent
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("purchase_amount_input")
+        )
+
+        // Cartão associado
+        ExposedDropdownMenuBox(
+            expanded = isDropdownExpanded,
+            onExpandedChange = { isDropdownExpanded = !isDropdownExpanded }
+        ) {
+            OutlinedTextField(
+                value = selectedCardName,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Cartão associado", style = MaterialTheme.typography.bodySmall) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryAccent,
+                    focusedLabelColor = PrimaryAccent
+                ),
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+                    .testTag("purchase_card_dropdown")
+            )
+
+            ExposedDropdownMenu(
+                expanded = isDropdownExpanded,
+                onDismissRequest = { isDropdownExpanded = false }
             ) {
-                // Nome
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Nome da compra", style = MaterialTheme.typography.bodySmall) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("purchase_name_input")
-                )
-
-                // Valor total
-                OutlinedTextField(
-                    value = totalAmountStr,
-                    onValueChange = { totalAmountStr = it.replace(',', '.') },
-                    label = { Text("Valor total (R$)", style = MaterialTheme.typography.bodySmall) },
-                    placeholder = { Text("Ex: 150.00") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("purchase_amount_input")
-                )
-
-                // Cartão associado
-                ExposedDropdownMenuBox(
-                    expanded = isDropdownExpanded,
-                    onExpandedChange = { isDropdownExpanded = !isDropdownExpanded }
-                ) {
-                    OutlinedTextField(
-                        value = selectedCardName,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Cartão associado", style = MaterialTheme.typography.bodySmall) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded) },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PrimaryAccent,
-                            focusedLabelColor = PrimaryAccent
-                        ),
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                            .testTag("purchase_card_dropdown")
+                if (availableCards.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text("Nenhum cartão cadastrado", style = MaterialTheme.typography.bodyMedium) },
+                        onClick = { isDropdownExpanded = false }
                     )
-
-                    ExposedDropdownMenu(
-                        expanded = isDropdownExpanded,
-                        onDismissRequest = { isDropdownExpanded = false }
-                    ) {
-                        if (availableCards.isEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text("Nenhum cartão cadastrado", style = MaterialTheme.typography.bodyMedium) },
-                                onClick = { isDropdownExpanded = false }
-                            )
-                        } else {
-                            availableCards.forEach { card ->
-                                DropdownMenuItem(
-                                    text = { Text(card.name, style = MaterialTheme.typography.bodyMedium) },
-                                    onClick = {
-                                        selectedCardId = card.id
-                                        selectedCardName = card.name
-                                        isDropdownExpanded = false
-                                    }
-                                )
+                } else {
+                    availableCards.forEach { card ->
+                        DropdownMenuItem(
+                            text = { Text(card.name, style = MaterialTheme.typography.bodyMedium) },
+                            onClick = {
+                                selectedCardId = card.id
+                                selectedCardName = card.name
+                                isDropdownExpanded = false
                             }
-                        }
+                        )
                     }
                 }
-
-                // Compra parcelada (Sim ou Não)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Compra parcelada?",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = TextPrimary
-                    )
-                    Switch(
-                        checked = isInstallment,
-                        onCheckedChange = { isInstallment = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                            checkedTrackColor = PrimaryAccent
-                        ),
-                        modifier = Modifier.testTag("purchase_installment_switch")
-                    )
-                }
-
-                if (isInstallment) {
-                    // Quantidade total de parcelas
-                    OutlinedTextField(
-                        value = totalInstallmentsStr,
-                        onValueChange = { totalInstallmentsStr = it },
-                        label = { Text("Quantidade total de parcelas", style = MaterialTheme.typography.bodySmall) },
-                        placeholder = { Text("Ex: 10") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PrimaryAccent,
-                            focusedLabelColor = PrimaryAccent
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("purchase_installments_count_input")
-                    )
-
-                    // Mês e ano da primeira parcela (MM/AAAA)
-                    OutlinedTextField(
-                        value = startMonthYearStr,
-                        onValueChange = { startMonthYearStr = it },
-                        label = { Text("Primeira parcela (MM/AAAA)", style = MaterialTheme.typography.bodySmall) },
-                        placeholder = { Text("Ex: 03/2026") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = PrimaryAccent,
-                            focusedLabelColor = PrimaryAccent
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("purchase_start_date_input")
-                    )
-                }
-
-                errorMessage?.let { err ->
-                    Text(
-                        text = err,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
             }
-        },
-        confirmButton = {
+        }
+
+        // Compra parcelada (Sim ou Não)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Compra parcelada?",
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextPrimary
+            )
+            Switch(
+                checked = isInstallment,
+                onCheckedChange = { isInstallment = it },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = PrimaryAccent
+                ),
+                modifier = Modifier.testTag("purchase_installment_switch")
+            )
+        }
+
+        if (isInstallment) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Quantidade total de parcelas
+                OutlinedTextField(
+                    value = totalInstallmentsStr,
+                    onValueChange = { totalInstallmentsStr = it },
+                    label = { Text("Parcelas", style = MaterialTheme.typography.bodySmall) },
+                    placeholder = { Text("Ex: 10") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryAccent,
+                        focusedLabelColor = PrimaryAccent
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("purchase_installments_count_input")
+                )
+
+                // Mês e ano da primeira parcela (MM/AAAA)
+                OutlinedTextField(
+                    value = startMonthYearStr,
+                    onValueChange = { startMonthYearStr = it },
+                    label = { Text("Início (MM/AAAA)", style = MaterialTheme.typography.bodySmall) },
+                    placeholder = { Text("03/2026") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryAccent,
+                        focusedLabelColor = PrimaryAccent
+                    ),
+                    modifier = Modifier
+                        .weight(1.5f)
+                        .testTag("purchase_start_date_input")
+                )
+            }
+        }
+
+        errorMessage?.let { err ->
+            Text(
+                text = err,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Cancelar", color = TextSecondary)
+            }
             Button(
                 onClick = {
                     val amount = totalAmountStr.toDoubleOrNull()
@@ -1025,18 +1195,16 @@ private fun PurchaseFormDialog(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = PrimaryAccent
                 ),
-                modifier = Modifier.testTag("save_purchase_button")
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(2f)
+                    .height(48.dp)
+                    .testTag("save_purchase_button")
             ) {
-                Text("Salvar")
+                Text("Salvar Compra", fontWeight = FontWeight.Bold)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar", color = TextSecondary)
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    )
+        }
+    }
 }
 
 @Composable
@@ -1045,80 +1213,72 @@ private fun QuitadaPurchaseRowItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 12.dp)
             .testTag("quitada_purchase_item_${purchase.id}"),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = purchase.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Medium
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = purchase.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                fontWeight = FontWeight.Bold
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    tint = SuccessGreen,
+                    modifier = Modifier.size(14.dp)
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(top = 2.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.CreditCard,
-                        contentDescription = null,
-                        tint = TextSecondary,
-                        modifier = Modifier.padding(end = 2.dp)
-                    )
-                    Text(
-                        text = purchase.cardName.ifBlank { "Sem cartão" },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                }
+                Text(
+                    text = purchase.cardName.ifBlank { "Sem cartão" },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
+        }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = String.format(Locale.forLanguageTag("pt-BR"), "R$ %.2f", purchase.totalAmount),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.testTag("edit_quitada_purchase_${purchase.id}")
+                    modifier = Modifier.size(32.dp).testTag("edit_quitada_purchase_${purchase.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
-                        contentDescription = "Editar compra",
-                        tint = TextSecondary
+                        contentDescription = "Editar",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.testTag("delete_quitada_purchase_${purchase.id}")
+                    modifier = Modifier.size(32.dp).testTag("delete_quitada_purchase_${purchase.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Delete,
-                        contentDescription = "Excluir compra",
-                        tint = MaterialTheme.colorScheme.error
+                        contentDescription = "Excluir",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = String.format(Locale("pt", "BR"), "R$ %.2f", purchase.totalAmount),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = TextPrimary
-                )
             }
         }
     }
@@ -1232,120 +1392,340 @@ private fun CardPaymentsHistoryDialog(
 }
 
 @Composable
+private fun SubscriptionRowItem(
+    subscription: SubscriptionItem,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp)
+            .testTag("subscription_item_${subscription.id}"),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Repeat,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Column {
+                Text(
+                    text = subscription.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = String.format(Locale("pt", "BR"), "R$ %.2f /mês", subscription.monthlyValue),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (subscription.cardName.isNotBlank()) {
+                        Text(
+                            text = "• ${subscription.cardName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(horizontalAlignment = Alignment.End) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.size(32.dp).testTag("edit_subscription_${subscription.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "Editar",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(32.dp).testTag("delete_subscription_${subscription.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = "Excluir",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SubscriptionFormContent(
+    title: String,
+    availableCards: List<CardItem>,
+    initialSubscription: SubscriptionItem?,
+    onDismiss: () -> Unit,
+    onConfirm: (SubscriptionItem) -> Unit
+) {
+    var name by remember { mutableStateOf(initialSubscription?.name ?: "") }
+    var valueStr by remember {
+        mutableStateOf(initialSubscription?.let { String.format(Locale.US, "%.2f", it.monthlyValue) } ?: "")
+    }
+    var selectedCardId by remember {
+        mutableStateOf(initialSubscription?.cardId ?: (availableCards.firstOrNull()?.id ?: ""))
+    }
+    var selectedCardName by remember {
+        mutableStateOf(
+            initialSubscription?.cardName
+                ?: availableCards.firstOrNull { it.id == selectedCardId }?.name
+                ?: if (availableCards.isNotEmpty()) availableCards.first().name else ""
+        )
+    }
+
+    var isDropdownExpanded by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(20.dp)
+            .imePadding()
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            color = TextPrimary,
+            fontWeight = FontWeight.Bold
+        )
+
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Nome da assinatura", style = MaterialTheme.typography.bodySmall) },
+            placeholder = { Text("Netflix, Spotify...") },
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryAccent,
+                focusedLabelColor = PrimaryAccent
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        OutlinedTextField(
+            value = valueStr,
+            onValueChange = { valueStr = it.replace(',', '.') },
+            label = { Text("Valor mensal (R$)", style = MaterialTheme.typography.bodySmall) },
+            placeholder = { Text("39.90") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryAccent,
+                focusedLabelColor = PrimaryAccent
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = isDropdownExpanded && availableCards.isNotEmpty(),
+            onExpandedChange = { if (availableCards.isNotEmpty()) isDropdownExpanded = !isDropdownExpanded }
+        ) {
+            OutlinedTextField(
+                value = if (availableCards.isEmpty()) "Nenhum cartão cadastrado" else selectedCardName,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Cartão associado", style = MaterialTheme.typography.bodySmall) },
+                trailingIcon = {
+                    if (availableCards.isNotEmpty()) ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded)
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryAccent,
+                    focusedLabelColor = PrimaryAccent
+                ),
+                modifier = Modifier.menuAnchor().fillMaxWidth()
+            )
+
+            if (availableCards.isNotEmpty()) {
+                ExposedDropdownMenu(
+                    expanded = isDropdownExpanded,
+                    onDismissRequest = { isDropdownExpanded = false }
+                ) {
+                    availableCards.forEach { card ->
+                        DropdownMenuItem(
+                            text = { Text(card.name, style = MaterialTheme.typography.bodyMedium) },
+                            onClick = {
+                                selectedCardId = card.id
+                                selectedCardName = card.name
+                                isDropdownExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        errorMessage?.let { err ->
+            Text(
+                text = err,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                Text("Cancelar", color = TextSecondary)
+            }
+            Button(
+                onClick = {
+                    val amount = valueStr.toDoubleOrNull()
+                    if (name.isBlank()) {
+                        errorMessage = "Informe o nome da assinatura."
+                        return@Button
+                    }
+                    if (amount == null || amount <= 0) {
+                        errorMessage = "Informe um valor mensal válido."
+                        return@Button
+                    }
+                    val sub = SubscriptionItem(
+                        id = initialSubscription?.id ?: UUID.randomUUID().toString(),
+                        name = name.trim(),
+                        monthlyValue = amount,
+                        cardId = selectedCardId,
+                        cardName = selectedCardName
+                    )
+                    onConfirm(sub)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.weight(2f).height(48.dp)
+            ) {
+                Text("Salvar Assinatura", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
 private fun DailyExpenseRowItem(
     expense: DailyExpense,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 12.dp)
             .testTag("daily_expense_item_${expense.id}"),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)),
+            contentAlignment = Alignment.Center
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = expense.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Medium
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 2.dp)
-                ) {
-                    Text(
-                        text = expense.date,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                    
-                    // Ícone do Meio de Pagamento
-                    val methodIcon = if (expense.paymentMethod == PaymentMethod.ESPECIE) Icons.Outlined.Payments else Icons.Outlined.AccountBalance
-                    val methodLabel = if (expense.paymentMethod == PaymentMethod.ESPECIE) "Espécie" else "Conta"
-                    
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Icon(
-                            imageVector = methodIcon,
-                            contentDescription = null,
-                            tint = TextSecondary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = methodLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextSecondary
-                        )
-                    }
+            val methodIcon = if (expense.paymentMethod == PaymentMethod.ESPECIE) Icons.Outlined.Payments else Icons.Outlined.AccountBalance
+            Icon(
+                imageVector = methodIcon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
 
-                    if (expense.source != DataSource.MANUAL) {
-                        SuggestionChip(
-                            onClick = {},
-                            label = {
-                                Text(
-                                    text = expense.source.name,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            },
-                            colors = SuggestionChipDefaults.suggestionChipColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                labelColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            ),
-                            border = null
-                        )
-                    }
-                }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = expense.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = expense.date,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (!expense.observation.isNullOrBlank()) {
                     Text(
-                        text = expense.observation,
+                        text = "• ${expense.observation}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(top = 4.dp)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
                     )
                 }
             }
+        }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = String.format(Locale("pt", "BR"), "R$ %.2f", expense.value),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = String.format(Locale.forLanguageTag("pt-BR"), "R$ %.2f", expense.value),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(
                     onClick = onEdit,
-                    modifier = Modifier.testTag("edit_daily_expense_${expense.id}")
+                    modifier = Modifier.size(32.dp).testTag("edit_daily_expense_${expense.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
-                        contentDescription = "Editar gasto",
-                        tint = TextSecondary
+                        contentDescription = "Editar",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
                 IconButton(
                     onClick = onDelete,
-                    modifier = Modifier.testTag("delete_daily_expense_${expense.id}")
+                    modifier = Modifier.size(32.dp).testTag("delete_daily_expense_${expense.id}")
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Delete,
-                        contentDescription = "Excluir gasto",
-                        tint = MaterialTheme.colorScheme.error
+                        contentDescription = "Excluir",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
@@ -1354,7 +1734,7 @@ private fun DailyExpenseRowItem(
 }
 
 @Composable
-private fun DailyExpenseFormDialog(
+private fun DailyExpenseFormContent(
     title: String,
     initialExpense: DailyExpense?,
     onDismiss: () -> Unit,
@@ -1375,138 +1755,138 @@ private fun DailyExpenseFormDialog(
 
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary) },
-        text = {
-            Column(
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(20.dp)
+            .imePadding()
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            color = TextPrimary,
+            fontWeight = FontWeight.Bold
+        )
+
+        // Nome
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Nome do gasto", style = MaterialTheme.typography.bodySmall) },
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryAccent,
+                focusedLabelColor = PrimaryAccent
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("daily_expense_name_input")
+        )
+
+        // Valor e Data em Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedTextField(
+                value = valueStr,
+                onValueChange = { valueStr = it.replace(',', '.') },
+                label = { Text("Valor (R$)", style = MaterialTheme.typography.bodySmall) },
+                placeholder = { Text("45.90") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryAccent,
+                    focusedLabelColor = PrimaryAccent
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("daily_expense_value_input")
+            )
+
+            OutlinedTextField(
+                value = date,
+                onValueChange = { date = it },
+                label = { Text("Data (AAAA-MM-DD)", style = MaterialTheme.typography.bodySmall) },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = PrimaryAccent,
+                    focusedLabelColor = PrimaryAccent
+                ),
+                modifier = Modifier
+                    .weight(1.5f)
+                    .testTag("daily_expense_date_input")
+            )
+        }
+
+        // Meio de Pagamento
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Meio de pagamento:",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
+            )
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Nome
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Nome do gasto", style = MaterialTheme.typography.bodySmall) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("daily_expense_name_input")
+                FilterChip(
+                    selected = paymentMethod == PaymentMethod.CONTA,
+                    onClick = { paymentMethod = PaymentMethod.CONTA },
+                    label = { Text("Conta") },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Outlined.AccountBalance, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    modifier = Modifier.weight(1f)
                 )
-
-                // Valor
-                OutlinedTextField(
-                    value = valueStr,
-                    onValueChange = { valueStr = it.replace(',', '.') },
-                    label = { Text("Valor (R$)", style = MaterialTheme.typography.bodySmall) },
-                    placeholder = { Text("Ex: 45.90") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("daily_expense_value_input")
+                FilterChip(
+                    selected = paymentMethod == PaymentMethod.ESPECIE,
+                    onClick = { paymentMethod = PaymentMethod.ESPECIE },
+                    label = { Text("Espécie") },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Outlined.Payments, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    modifier = Modifier.weight(1f)
                 )
-
-                // Data (AAAA-MM-DD ou DD/MM/AAAA)
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = { date = it },
-                    label = { Text("Data (AAAA-MM-DD)", style = MaterialTheme.typography.bodySmall) },
-                    placeholder = { Text("Ex: 2026-07-29") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("daily_expense_date_input")
-                )
-
-                // Meio de Pagamento
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Meio de pagamento:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        // Opção: Conta
-                        FilterChip(
-                            selected = paymentMethod == PaymentMethod.CONTA,
-                            onClick = { paymentMethod = PaymentMethod.CONTA },
-                            label = { Text("Dinheiro em Conta") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.AccountBalance,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = PrimaryAccent,
-                                selectedLeadingIconColor = PrimaryAccent
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-                        // Opção: Espécie
-                        FilterChip(
-                            selected = paymentMethod == PaymentMethod.ESPECIE,
-                            onClick = { paymentMethod = PaymentMethod.ESPECIE },
-                            label = { Text("Espécie") },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Payments,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = PrimaryAccent,
-                                selectedLeadingIconColor = PrimaryAccent
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                // Observação (opcional)
-                OutlinedTextField(
-                    value = observation,
-                    onValueChange = { observation = it },
-                    label = { Text("Observação (opcional)", style = MaterialTheme.typography.bodySmall) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryAccent,
-                        focusedLabelColor = PrimaryAccent
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("daily_expense_observation_input")
-                )
-
-                errorMessage?.let { err ->
-                    Text(
-                        text = err,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
             }
-        },
-        confirmButton = {
+        }
+
+        // Observação
+        OutlinedTextField(
+            value = observation,
+            onValueChange = { observation = it },
+            label = { Text("Observação (opcional)", style = MaterialTheme.typography.bodySmall) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PrimaryAccent,
+                focusedLabelColor = PrimaryAccent
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("daily_expense_observation_input")
+        )
+
+        errorMessage?.let { err ->
+            Text(
+                text = err,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Cancelar", color = TextSecondary)
+            }
             Button(
                 onClick = {
                     val amount = valueStr.toDoubleOrNull()
@@ -1537,16 +1917,14 @@ private fun DailyExpenseFormDialog(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = PrimaryAccent
                 ),
-                modifier = Modifier.testTag("save_daily_expense_button")
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(2f)
+                    .height(48.dp)
+                    .testTag("save_daily_expense_button")
             ) {
-                Text("Salvar")
+                Text("Salvar Gasto", fontWeight = FontWeight.Bold)
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar", color = TextSecondary)
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    )
+        }
+    }
 }

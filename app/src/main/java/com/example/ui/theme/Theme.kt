@@ -7,21 +7,24 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+enum class ThemeMode {
+    LIGHT, DARK, SYSTEM
+}
+
 private val LightColorScheme = lightColorScheme(
     primary = PrimaryAccentLight,
     onPrimary = Color.White,
     primaryContainer = PrimaryAccentContainerLight,
     onPrimaryContainer = OnPrimaryAccentContainerLight,
-    secondary = TextSecondaryLight,
-    onSecondary = Color.White,
-    background = BackgroundLightLight,
+    background = BackgroundLight,
     onBackground = TextPrimaryLight,
-    surface = SurfaceLightLight,
+    surface = SurfaceLight,
     onSurface = TextPrimaryLight,
-    surfaceVariant = SecondaryBackgroundLight,
+    surfaceVariant = BackgroundLight,
     onSurfaceVariant = TextSecondaryLight,
     outline = DividerColorLight,
-    outlineVariant = DividerColorLight
+    outlineVariant = DividerColorLight,
+    secondary = TextSecondaryLight
 )
 
 private val DarkColorScheme = darkColorScheme(
@@ -29,26 +32,30 @@ private val DarkColorScheme = darkColorScheme(
     onPrimary = Color.Black,
     primaryContainer = PrimaryAccentContainerDark,
     onPrimaryContainer = OnPrimaryAccentContainerDark,
-    secondary = TextSecondaryDark,
-    onSecondary = Color.Black,
-    background = BackgroundLightDark,
+    background = BackgroundDark,
     onBackground = TextPrimaryDark,
-    surface = SurfaceLightDark,
+    surface = SurfaceDark,
     onSurface = TextPrimaryDark,
-    surfaceVariant = SecondaryBackgroundDark,
+    surfaceVariant = BackgroundDark,
     onSurfaceVariant = TextSecondaryDark,
     outline = DividerColorDark,
-    outlineVariant = DividerColorDark
+    outlineVariant = DividerColorDark,
+    secondary = TextSecondaryDark
 )
 
 @Composable
 fun FinanceiroPessoalTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
     content: @Composable () -> Unit
 ) {
-    // Segue automaticamente o tema claro/escuro definido pelo usuário no sistema.
+    val darkTheme = when (themeMode) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,

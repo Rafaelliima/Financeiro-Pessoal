@@ -17,9 +17,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.navigation.Screen
-import com.example.ui.theme.DividerColor
-import com.example.ui.theme.PrimaryAccent
-import com.example.ui.theme.TextSecondary
 
 @Composable
 fun AppBottomNavigation(
@@ -32,7 +29,7 @@ fun AppBottomNavigation(
             .windowInsetsPadding(WindowInsets.navigationBars)
             .testTag("app_bottom_navigation")
     ) {
-        HorizontalDivider(color = DividerColor, thickness = 1.dp)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), thickness = 1.dp)
         NavigationBar(
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp
@@ -51,18 +48,18 @@ fun AppBottomNavigation(
                     label = {
                         Text(
                             text = screen.title,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.labelSmall,
                             maxLines = 1,
                             softWrap = false,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                     },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = PrimaryAccent,
-                        selectedTextColor = PrimaryAccent,
+                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                        selectedTextColor = MaterialTheme.colorScheme.primary,
                         indicatorColor = Color.Transparent,
-                        unselectedIconColor = TextSecondary,
-                        unselectedTextColor = TextSecondary
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     ),
                     modifier = Modifier.testTag("nav_item_${screen.route}")
                 )

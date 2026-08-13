@@ -3,7 +3,9 @@ package com.example.data
 import com.google.firebase.firestore.PropertyName
 import java.util.UUID
 
-const val CURRENT_VERSION = 11
+import com.example.ui.theme.ThemeMode
+
+const val CURRENT_VERSION = 12
 
 data class GoogleAccountData(
     @get:PropertyName("isConnected") @set:PropertyName("isConnected") var isConnected: Boolean = false,
@@ -35,6 +37,7 @@ data class StorageData(
     val subscriptions: List<SubscriptionItem> = emptyList(),
     val cardPayments: List<CardPaymentItem> = emptyList(),
     val dailyExpenses: List<DailyExpense> = emptyList(),
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val googleAccount: GoogleAccountData? = null,
     // Coleções preparadas para expansões futuras
     val categories: List<Any> = emptyList(),

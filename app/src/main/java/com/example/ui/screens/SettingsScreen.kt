@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,15 +13,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.PowerOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -28,9 +29,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,20 +40,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.GoogleAccountData
 import com.example.ui.components.StatusFeedbackBanner
-import com.example.ui.theme.DividerColor
-import com.example.ui.theme.PrimaryAccent
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.ThemeMode
 
 @Composable
 fun SettingsScreen(
     googleAccount: GoogleAccountData? = null,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
     onConnectClick: () -> Unit = {},
     onDisconnectClick: () -> Unit = {},
     statusMessage: String? = null,
@@ -61,6 +61,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     var showDisconnectDialog by remember { mutableStateOf(false) }
+    var showAccountMenu by remember { mutableStateOf(false) }
 
     val isConnected = googleAccount?.isConnected == true
 
@@ -69,194 +70,100 @@ fun SettingsScreen(
             .fillMaxSize()
             .testTag("settings_screen")
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+            .padding(horizontal = 16.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         Text(
             text = "Configurações",
             style = MaterialTheme.typography.titleLarge,
-            color = TextPrimary,
-            fontWeight = FontWeight.Bold
+            color = MaterialTheme.colorScheme.onBackground,
+            fontWeight = FontWeight.ExtraBold
         )
 
-        // Status Banner de feedback
         if (!statusMessage.isNullOrBlank()) {
-            StatusFeedbackBanner(
-                message = statusMessage,
-                isError = isErrorStatus
-            )
+            StatusFeedbackBanner(message = statusMessage, isError = isErrorStatus)
         }
 
-        // Seção: Perfil e Conta (Menu expansível) — usada para backup na nuvem (Google Firestore)
-        var showAccountMenu by remember { mutableStateOf(false) }
-
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            SettingItemRow(
-                icon = Icons.Outlined.Person,
-                title = "Perfil e Conta",
-                subtitle = if (isConnected) (googleAccount?.userEmail ?: "Conta Google Conectada") else "Conecte sua conta Google",
-                onClick = { showAccountMenu = !showAccountMenu },
-                trailingIcon = if (showAccountMenu) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowRight
+        // APARÊNCIA
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = "Aparência",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
             )
-
-            if (showAccountMenu) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 8.dp)
-                        .testTag("google_account_card"),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    Column {
+                        Text(text = "Modo Escuro", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                        Text(text = "Ativa o tema azul profundo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = themeMode == ThemeMode.DARK,
+                        onCheckedChange = { isDark -> onThemeModeChange(if (isDark) ThemeMode.DARK else ThemeMode.LIGHT) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = MaterialTheme.colorScheme.primary)
+                    )
+                }
+            }
+        }
+
+        // CONTA
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = "Backup e Sincronização",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    SettingItemRow(
+                        icon = Icons.Outlined.Person,
+                        title = "Perfil e Conta",
+                        subtitle = if (isConnected) (googleAccount?.userEmail ?: "Conectado") else "Conecte sua conta Google",
+                        onClick = { showAccountMenu = !showAccountMenu },
+                        trailingIcon = if (showAccountMenu) Icons.Outlined.KeyboardArrowDown else Icons.Outlined.KeyboardArrowRight
+                    )
+                    if (showAccountMenu) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Column(
+                            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp)).padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text(
-                                text = "Status da Conta:",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = TextPrimary
-                            )
-
-                            SuggestionChip(
-                                onClick = {},
-                                label = {
-                                    Text(
-                                        text = if (isConnected) "Conectado" else "Desconectado",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.testTag("connection_status_chip")
-                                    )
-                                },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (isConnected) Icons.Outlined.CheckCircle else Icons.Outlined.PowerOff,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                colors = SuggestionChipDefaults.suggestionChipColors(
-                                    containerColor = if (isConnected) MaterialTheme.colorScheme.primaryContainer else DividerColor,
-                                    labelColor = if (isConnected) PrimaryAccent else TextSecondary,
-                                    iconContentColor = if (isConnected) PrimaryAccent else TextSecondary
-                                ),
-                                border = null
-                            )
-                        }
-
-                        if (isConnected) {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("connected_account_details")
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.AccountCircle,
-                                        contentDescription = null,
-                                        tint = PrimaryAccent,
-                                        modifier = Modifier.size(28.dp)
-                                    )
+                            if (isConnected) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Icon(imageVector = Icons.Outlined.AccountCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                                     Column {
-                                        Text(
-                                            text = googleAccount?.userName ?: "Usuário Google",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TextPrimary,
-                                            modifier = Modifier.testTag("account_user_name")
-                                        )
-                                        Text(
-                                            text = googleAccount?.userEmail ?: "Sem e-mail",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = TextSecondary,
-                                            modifier = Modifier.testTag("account_user_email")
-                                        )
+                                        Text(text = googleAccount?.userName ?: "Usuário", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                                        Text(text = googleAccount?.userEmail ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
-
-                                googleAccount?.connectedAt?.let { connDate ->
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Conectado em: $connDate",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = TextSecondary,
-                                        modifier = Modifier.testTag("account_connected_at")
-                                    )
-                                }
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Sincronização Nuvem:", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                                    Text(
-                                        text = "Ativa (Google Firestore)",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PrimaryAccent,
-                                        modifier = Modifier.testTag("cloud_sync_status")
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
-
-                                OutlinedButton(
+                                Button(
                                     onClick = { showDisconnectDialog = true },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("disconnect_google_button"),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.error
-                                    )
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
+                                    shape = RoundedCornerShape(10.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.PowerOff,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp).padding(end = 6.dp)
-                                    )
-                                    Text("Desconectar conta", fontWeight = FontWeight.Bold)
+                                    Text("Desconectar", fontWeight = FontWeight.Bold)
                                 }
-                            }
-                        } else {
-                            Text(
-                                text = "Conecte sua conta Google utilizando a autenticação oficial do Android (OAuth 2.0). Nenhuma senha é solicitada ou armazenada.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
-                            )
-
-                            Button(
-                                onClick = onConnectClick,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("connect_google_button"),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = PrimaryAccent,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.AccountCircle,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp).padding(end = 6.dp)
-                                )
-                                Text("Conectar conta Google", fontWeight = FontWeight.Bold)
+                            } else {
+                                Button(onClick = onConnectClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                                    Text("Conectar com Google", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -264,60 +171,31 @@ fun SettingsScreen(
             }
         }
 
-        HorizontalDivider(color = DividerColor)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-        // Sobre
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Info,
-                contentDescription = "Sobre",
-                tint = TextSecondary,
-                modifier = Modifier.padding(end = 12.dp)
-            )
+        // SOBRE
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(imageVector = Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 12.dp))
             Column {
-                Text(
-                    text = "Financeiro Pessoal",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "Versão 1.0 (Google OAuth 2.0 Oficial)",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
-                )
+                Text(text = "Financeiro Pessoal", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text(text = "Versão 1.2 (Premium UI)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 
-    // Diálogo de Confirmação de Desconexão
     if (showDisconnectDialog) {
         AlertDialog(
             onDismissRequest = { showDisconnectDialog = false },
-            title = {
-                Text("Desconectar conta Google?")
-            },
-            text = {
-                Text("Deseja realmente desconectar a conta ${googleAccount?.userEmail ?: ""}? A sessão Google será revogada.")
-            },
+            title = { Text("Desconectar?") },
+            text = { Text("Deseja desconectar a conta ${googleAccount?.userEmail ?: ""}? A sincronização será pausada.") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDisconnectDialog = false
-                        onDisconnectClick()
-                    },
-                    modifier = Modifier.testTag("confirm_disconnect_button")
-                ) {
+                TextButton(onClick = { showDisconnectDialog = false; onDisconnectClick() }) {
                     Text("Desconectar", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDisconnectDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text("Cancelar", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             containerColor = MaterialTheme.colorScheme.surface
@@ -334,36 +212,14 @@ private fun SettingItemRow(
     trailingIcon: ImageVector = Icons.Outlined.KeyboardArrowRight
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-            .padding(vertical = 14.dp),
+        modifier = Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable { onClick() } else Modifier).padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = title,
-            tint = TextSecondary,
-            modifier = Modifier.padding(end = 16.dp)
-        )
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextPrimary
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
-            )
+        Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+            Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Icon(
-            imageVector = trailingIcon,
-            contentDescription = null,
-            tint = TextSecondary
-        )
+        Icon(imageVector = trailingIcon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

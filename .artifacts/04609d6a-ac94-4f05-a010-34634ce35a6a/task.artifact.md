@@ -1,0 +1,8 @@
+- [x] Redefinir paleta de cores moderna em `Color.kt`
+- [x] Atualizar `Theme.kt` para suportar `ThemeMode` manual
+- [x] Refinar tipografia e hierarquia de textos em `Type.kt`
+- [x] Modernizar layout e disposição de textos no `DashboardScreen.kt`
+- [x] Ajustar layout de listas e abas na `PurchasesScreen.kt`
+- [x] Adicionar controle de tema na `MainActivity.kt` e `SettingsScreen.kt`
+- [x] Verificar consistência visual e legibilidade
+- [x] Atualizar versão do projeto para 1.5 (versão 4)

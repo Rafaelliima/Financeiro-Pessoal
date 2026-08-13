@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.financeiro.pessoal.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 3
-    versionName = "1.2"
+    versionCode = 4
+    versionName = "1.5"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -38,7 +38,13 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      
+      // Only use the release signing config if the keystore file exists
+      val releaseSigningConfig = signingConfigs.getByName("release")
+      signingConfig = signingConfigs.getByName("debug")
+      if (releaseSigningConfig.storeFile?.exists() == true) {
+        signingConfig = releaseSigningConfig
+      }
     }
     debug { }
   }

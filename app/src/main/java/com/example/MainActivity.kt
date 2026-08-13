@@ -71,8 +71,6 @@ import java.security.MessageDigest
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // CÓDIGO PARA PEGAR O NOVO SHA-1 DE PRODUÇÃO (RELEASE)
         try {
             val info = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
                 packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
@@ -90,7 +88,7 @@ class MainActivity : ComponentActivity() {
                 val md = MessageDigest.getInstance("SHA1")
                 md.update(signature.toByteArray())
                 val sha1 = md.digest().joinToString(":") { String.format("%02X", it) }
-                Log.d("FIREBASE_SHA1", "SEU NOVO SHA-1 DE PRODUÇÃO É: $sha1")
+                Log.d("FIREBASE_SHA1", "SHA-1: $sha1")
             }
         } catch (e: Exception) {
             Log.e("FIREBASE_SHA1", "Erro ao obter SHA-1", e)
@@ -98,9 +96,7 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            FinanceiroPessoalTheme {
-                MainAppStructure()
-            }
+            MainAppStructure()
         }
     }
 }
@@ -116,268 +112,205 @@ fun MainAppStructure() {
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var currentScreenRoute by rememberSaveable { mutableStateOf(Screen.Dashboard.route) }
-    var isLoading by remember { mutableStateOf(true) }
     var storageData by remember { mutableStateOf(StorageData()) }
-    var statusMessage by remember { mutableStateOf<String?>(null) }
-    var isErrorStatus by remember { mutableStateOf(false) }
-    var isAuthenticating by remember { mutableStateOf(false) }
-    var updateInfo by remember { mutableStateOf<AppVersionInfo?>(null) }
 
-    // Launcher oficial do Google Sign-In
-    val googleSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        isAuthenticating = true
-        coroutineScope.launch {
-            val handleResult = googleAuthManager.handleSignInResult(result.data)
-            handleResult.fold(
-                onSuccess = { newAccount ->
-                    googleAccountRepository.saveGoogleAccount(newAccount) { isSuccess, saveMessage ->
-                        storageData = storageData.copy(googleAccount = newAccount)
-                        statusMessage = "Conta conectada. Sincronizando..."
-                        
-                        // Sincronização inicial pós-login
-                        coroutineScope.launch {
-                            val userId = newAccount.accountId
-                            if (!userId.isNullOrBlank()) {
-                                val cloudData = firebaseManager.loadDataFromCloud(userId)
-                                if (cloudData != null) {
-                                    storageData = cloudData.copy(googleAccount = newAccount)
-                                    storageManager.saveData(storageData)
-                                } else {
-                                    firebaseManager.syncDataToCloud(userId, storageData)
+    FinanceiroPessoalTheme(themeMode = storageData.themeMode) {
+        var currentScreenRoute by rememberSaveable { mutableStateOf(Screen.Dashboard.route) }
+        var isLoading by remember { mutableStateOf(true) }
+        var statusMessage by remember { mutableStateOf<String?>(null) }
+        var isErrorStatus by remember { mutableStateOf(false) }
+        var isAuthenticating by remember { mutableStateOf(false) }
+        var updateInfo by remember { mutableStateOf<AppVersionInfo?>(null) }
+
+        val googleSignInLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            isAuthenticating = true
+            coroutineScope.launch {
+                val handleResult = googleAuthManager.handleSignInResult(result.data)
+                handleResult.fold(
+                    onSuccess = { newAccount ->
+                        googleAccountRepository.saveGoogleAccount(newAccount) { isSuccess, saveMessage ->
+                            storageData = storageData.copy(googleAccount = newAccount)
+                            statusMessage = "Conta conectada. Sincronizando..."
+                            coroutineScope.launch {
+                                val userId = newAccount.accountId
+                                if (!userId.isNullOrBlank()) {
+                                    val cloudData = firebaseManager.loadDataFromCloud(userId)
+                                    if (cloudData != null) {
+                                        storageData = cloudData.copy(googleAccount = newAccount)
+                                        storageManager.saveData(storageData)
+                                    } else {
+                                        firebaseManager.syncDataToCloud(userId, storageData)
+                                    }
                                 }
+                                isAuthenticating = false
                             }
-                            isAuthenticating = false
                         }
+                    },
+                    onFailure = { error ->
+                        statusMessage = error.message ?: "Falha ao conectar com o Google."
+                        isErrorStatus = true
+                        isAuthenticating = false
                     }
+                )
+            }
+        }
+
+        val isUserLoggedIn = storageData.googleAccount?.isConnected == true
+
+        if (updateInfo != null) {
+            AlertDialog(
+                onDismissRequest = { updateInfo = null },
+                title = { Text("Nova Atualização!") },
+                text = { Text("Uma nova versão (${updateInfo?.latestVersionName}) está disponível.") },
+                confirmButton = {
+                    Button(onClick = {
+                        updateInfo?.let { updateManager.downloadAndInstallApk(it.apkUrl) }
+                        updateInfo = null
+                    }) { Text("Atualizar agora") }
                 },
-                onFailure = { error ->
-                    statusMessage = error.message ?: "Falha ao conectar com o Google."
-                    isErrorStatus = true
-                    isAuthenticating = false
+                dismissButton = {
+                    TextButton(onClick = { updateInfo = null }) { Text("Depois", color = TextSecondary) }
                 }
             )
         }
-    }
 
-    val isUserLoggedIn = storageData.googleAccount?.isConnected == true
-
-    if (updateInfo != null) {
-        AlertDialog(
-            onDismissRequest = { updateInfo = null },
-            title = { Text("Nova Atualização!") },
-            text = { 
-                Text("Uma nova versão (${updateInfo?.latestVersionName}) está disponível. Deseja baixar e instalar?")
-            },
-            confirmButton = {
-                Button(onClick = {
-                    updateInfo?.let { updateManager.downloadAndInstallApk(it.apkUrl) }
-                    updateInfo = null
-                }) {
-                    Text("Atualizar agora")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { updateInfo = null }) {
-                    Text("Depois", color = TextSecondary)
+        LaunchedEffect(Unit) {
+            val lastAccount = googleAuthManager.getLastSignedInAccount()
+            if (lastAccount != null) {
+                storageData = storageData.copy(googleAccount = lastAccount)
+            }
+            val loadResult = storageManager.loadData()
+            storageData = storageData.copy(
+                cards = loadResult.data?.cards ?: storageData.cards,
+                purchases = loadResult.data?.purchases ?: storageData.purchases,
+                subscriptions = loadResult.data?.subscriptions ?: storageData.subscriptions,
+                dailyExpenses = loadResult.data?.dailyExpenses ?: storageData.dailyExpenses,
+                themeMode = loadResult.data?.themeMode ?: storageData.themeMode
+            )
+            val userId = lastAccount?.accountId
+            if (lastAccount != null && !userId.isNullOrBlank()) {
+                val cloudData = firebaseManager.loadDataFromCloud(userId)
+                if (cloudData != null) {
+                    storageData = cloudData.copy(googleAccount = lastAccount)
+                    storageManager.saveData(storageData)
                 }
             }
-        )
-    }
-
-    // Carrega os dados (Local + Nuvem se conectado) ao abrir o app
-    LaunchedEffect(Unit) {
-        // 1. Tenta recuperar sessão existente no Google Play Services
-        val lastAccount = googleAuthManager.getLastSignedInAccount()
-        if (lastAccount != null) {
-            storageData = storageData.copy(googleAccount = lastAccount)
+            updateInfo = updateManager.checkForUpdate()
+            isLoading = false
         }
 
-        // 2. Carrega dados locais
-        val loadResult = storageManager.loadData()
-        storageData = storageData.copy(
-            cards = loadResult.data?.cards ?: storageData.cards,
-            purchases = loadResult.data?.purchases ?: storageData.purchases,
-            subscriptions = loadResult.data?.subscriptions ?: storageData.subscriptions,
-            dailyExpenses = loadResult.data?.dailyExpenses ?: storageData.dailyExpenses
-        )
-
-        // 3. Se logado, sincroniza com Firebase
-        val userId = lastAccount?.accountId
-        if (lastAccount != null && !userId.isNullOrBlank()) {
-            val cloudData = firebaseManager.loadDataFromCloud(userId)
-            if (cloudData != null) {
-                storageData = cloudData.copy(googleAccount = lastAccount)
-                storageManager.saveData(storageData)
-            }
-        }
-        
-        // 4. Verifica atualizações em segundo plano
-        val info = updateManager.checkForUpdate()
-        Log.d("UpdateCheck", "Resultado da verificação: $info")
-        updateInfo = info
-
-        isLoading = false
-    }
-
-    // Função central para persistir alterações no JSON, Firestore e exibir feedback
-    fun updateAndSaveData(newStorageData: StorageData) {
-        storageData = newStorageData
-        
-        // Salva Localmente
-        val saveResult = storageManager.saveData(newStorageData)
-        statusMessage = saveResult.message
-        isErrorStatus = !saveResult.isSuccess
-        
-        coroutineScope.launch {
-            // Salva na Nuvem se estiver conectado
-            val account = storageData.googleAccount ?: googleAccountRepository.getGoogleAccount()
-            val userId = account?.accountId
-            if (account?.isConnected == true && !userId.isNullOrBlank()) {
-                val cloudSuccess = firebaseManager.syncDataToCloud(userId, newStorageData)
-                if (!cloudSuccess) {
-                    statusMessage = "Erro ao sincronizar com a nuvem (Salvo localmente)"
+        fun updateAndSaveData(newStorageData: StorageData) {
+            storageData = newStorageData
+            val saveResult = storageManager.saveData(newStorageData)
+            statusMessage = saveResult.message
+            isErrorStatus = !saveResult.isSuccess
+            coroutineScope.launch {
+                val account = storageData.googleAccount ?: googleAccountRepository.getGoogleAccount()
+                val userId = account?.accountId
+                if (account?.isConnected == true && !userId.isNullOrBlank()) {
+                    firebaseManager.syncDataToCloud(userId, newStorageData)
                 }
-            }
-
-            snackbarHostState.showSnackbar(statusMessage ?: saveResult.message)
-            delay(3000)
-            if (statusMessage == saveResult.message || statusMessage?.contains("nuvem") == true) {
+                snackbarHostState.showSnackbar(statusMessage ?: saveResult.message)
+                delay(3000)
                 statusMessage = null
             }
         }
-    }
 
-    fun registerInvoicePayment(card: CardItem) {
-        val currentCal = Calendar.getInstance()
-        val currentMonth = currentCal.get(Calendar.MONTH) + 1
-        val currentYear = currentCal.get(Calendar.YEAR)
-
-        // A contagem de parcelas de cada compra agora é 100% automática pelo
-        // calendário (ver PurchaseItem.calculateInstallments) — não depende mais
-        // de "Confirmar pagamento" ser clicado todo mês. Este botão serve apenas
-        // para registrar no histórico do cartão que a fatura daquele mês foi paga.
-        val newPayment = CardPaymentItem(
-            cardId = card.id,
-            month = currentMonth,
-            year = currentYear,
-            paid = true,
-            paidAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(currentCal.time)
-        )
-        val updatedCardPayments = storageData.cardPayments.filterNot {
-            it.cardId == card.id && it.month == currentMonth && it.year == currentYear
-        } + newPayment
-
-        updateAndSaveData(
-            storageData.copy(cardPayments = updatedCardPayments)
-        )
-    }
-
-    val currentScreen = Screen.items.find { it.route == currentScreenRoute } ?: Screen.Dashboard
-
-    if (isLoading) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(
-                    modifier = Modifier.testTag("loading_indicator"),
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Carregando...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
+        fun registerInvoicePayment(card: CardItem) {
+            val currentCal = Calendar.getInstance()
+            val currentMonth = currentCal.get(Calendar.MONTH) + 1
+            val currentYear = currentCal.get(Calendar.YEAR)
+            val newPayment = CardPaymentItem(
+                cardId = card.id,
+                month = currentMonth,
+                year = currentYear,
+                paid = true,
+                paidAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(currentCal.time)
+            )
+            val updatedCardPayments = storageData.cardPayments.filterNot {
+                it.cardId == card.id && it.month == currentMonth && it.year == currentYear
+            } + newPayment
+            val updatedPurchases = storageData.purchases.map { purchase ->
+                val isSameCard = purchase.cardId == card.id || (purchase.cardId.isBlank() && purchase.cardName == card.name)
+                if (isSameCard) {
+                    val calc = purchase.calculateInstallments(currentMonth, currentYear)
+                    if (purchase.isInstallment && calc.status == "Em andamento") {
+                        purchase.copy(paidInstallmentsCount = calc.currentInstallment)
+                    } else purchase
+                } else purchase
             }
+            updateAndSaveData(storageData.copy(cardPayments = updatedCardPayments, purchases = updatedPurchases))
         }
-    } else if (!isUserLoggedIn) {
-        LoginScreen(
-            onLoginClick = {
-                googleSignInLauncher.launch(googleAuthManager.getSignInIntent())
-            },
-            isLoading = isAuthenticating,
-            errorMessage = if (isErrorStatus) statusMessage else null
-        )
-    } else {
-        Scaffold(
-            modifier = Modifier.fillMaxSize().testTag("main_scaffold"),
-            bottomBar = {
-                AppBottomNavigation(
-                    currentScreen = currentScreen,
-                    onScreenSelected = { screen ->
-                        currentScreenRoute = screen.route
-                    }
-                )
-            },
-            snackbarHost = {
-                SnackbarHost(hostState = snackbarHostState)
-            }
-        ) { innerPadding ->
-            val screenModifier = Modifier
-                .padding(innerPadding)
-                .statusBarsPadding()
 
-            when (currentScreen) {
-                Screen.Dashboard -> DashboardScreen(
-                    cards = storageData.cards,
-                    purchases = storageData.purchases,
-                    subscriptions = storageData.subscriptions,
-                    dailyExpenses = storageData.dailyExpenses,
-                    modifier = screenModifier
-                )
-                Screen.Cards -> CardsScreen(
-                    cards = storageData.cards,
-                    cardPayments = storageData.cardPayments,
-                    onUpdateCards = { newCards ->
-                        updateAndSaveData(storageData.copy(cards = newCards))
-                    },
-                    onRegisterInvoicePayment = ::registerInvoicePayment,
-                    modifier = screenModifier
-                )
-                Screen.Purchases -> PurchasesScreen(
-                    purchases = storageData.purchases,
-                    cards = storageData.cards,
-                    cardPayments = storageData.cardPayments,
-                    dailyExpenses = storageData.dailyExpenses,
-                    onUpdatePurchases = { newPurchases ->
-                        updateAndSaveData(storageData.copy(purchases = newPurchases))
-                    },
-                    onUpdateDailyExpenses = { newExpenses ->
-                        updateAndSaveData(storageData.copy(dailyExpenses = newExpenses))
-                    },
-                    modifier = screenModifier
-                )
-                Screen.Subscriptions -> SubscriptionsScreen(
-                    subscriptions = storageData.subscriptions,
-                    cards = storageData.cards,
-                    onUpdateSubscriptions = { newSubs ->
-                        updateAndSaveData(storageData.copy(subscriptions = newSubs))
-                    },
-                    modifier = screenModifier
-                )
-                Screen.Settings -> SettingsScreen(
-                    googleAccount = storageData.googleAccount,
-                    onConnectClick = {
-                        googleSignInLauncher.launch(googleAuthManager.getSignInIntent())
-                    },
-                    onDisconnectClick = {
-                        googleAuthManager.signOut { _ ->
-                            googleAccountRepository.clearGoogleAccount { _, _ ->
-                                storageData = storageData.copy(googleAccount = null)
-                                statusMessage = "Conta Google desconectada com sucesso."
-                                isErrorStatus = false
+        val currentScreen = Screen.items.find { it.route == currentScreenRoute } ?: Screen.Dashboard
+
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(text = "Carregando...", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        } else if (!isUserLoggedIn) {
+            LoginScreen(
+                onLoginClick = { googleSignInLauncher.launch(googleAuthManager.getSignInIntent()) },
+                isLoading = isAuthenticating,
+                errorMessage = if (isErrorStatus) statusMessage else null
+            )
+        } else {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                bottomBar = {
+                    AppBottomNavigation(
+                        currentScreen = currentScreen,
+                        onScreenSelected = { screen -> currentScreenRoute = screen.route }
+                    )
+                },
+                snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+            ) { innerPadding ->
+                val screenModifier = Modifier.padding(innerPadding).statusBarsPadding()
+                when (currentScreen) {
+                    Screen.Dashboard -> DashboardScreen(
+                        cards = storageData.cards,
+                        purchases = storageData.purchases,
+                        subscriptions = storageData.subscriptions,
+                        dailyExpenses = storageData.dailyExpenses,
+                        modifier = screenModifier
+                    )
+                    Screen.Purchases -> PurchasesScreen(
+                        purchases = storageData.purchases,
+                        cards = storageData.cards,
+                        cardPayments = storageData.cardPayments,
+                        dailyExpenses = storageData.dailyExpenses,
+                        subscriptions = storageData.subscriptions,
+                        onUpdatePurchases = { newPurchases -> updateAndSaveData(storageData.copy(purchases = newPurchases)) },
+                        onUpdateDailyExpenses = { newExpenses -> updateAndSaveData(storageData.copy(dailyExpenses = newExpenses)) },
+                        onUpdateSubscriptions = { newSubs -> updateAndSaveData(storageData.copy(subscriptions = newSubs)) },
+                        onRegisterInvoicePayment = ::registerInvoicePayment,
+                        modifier = screenModifier
+                    )
+                    Screen.Settings -> SettingsScreen(
+                        googleAccount = storageData.googleAccount,
+                        themeMode = storageData.themeMode,
+                        onThemeModeChange = { newMode -> updateAndSaveData(storageData.copy(themeMode = newMode)) },
+                        onConnectClick = { googleSignInLauncher.launch(googleAuthManager.getSignInIntent()) },
+                        onDisconnectClick = {
+                            googleAuthManager.signOut { _ ->
+                                googleAccountRepository.clearGoogleAccount { _, _ ->
+                                    storageData = storageData.copy(googleAccount = null)
+                                    statusMessage = "Conta desconectada."
+                                    isErrorStatus = false
+                                }
                             }
-                        }
-                    },
-                    statusMessage = statusMessage,
-                    isErrorStatus = isErrorStatus,
-                    modifier = screenModifier
-                )
+                        },
+                        statusMessage = statusMessage,
+                        isErrorStatus = isErrorStatus,
+                        modifier = screenModifier
+                    )
+                }
             }
         }
     }

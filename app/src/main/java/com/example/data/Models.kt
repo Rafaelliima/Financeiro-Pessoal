@@ -60,28 +60,31 @@ data class PurchaseItem(
     ): InstallmentCalculation {
         val instVal = if (totalInstallments > 0) totalAmount / totalInstallments else totalAmount
 
-        if (isQuitada) {
+        if (isQuitada || (isInstallment && paidInstallmentsCount >= totalInstallments)) {
             return InstallmentCalculation(totalInstallments, totalInstallments, totalInstallments, 0, instVal, "Quitado")
         }
 
         if (!isInstallment || totalInstallments <= 1) {
-            val isPaid = (queryYear > startYear) || (queryYear == startYear && queryMonth >= startMonth)
+            val isPaid = (queryYear > startYear) || (queryYear == startYear && queryMonth >= startMonth) || paidInstallmentsCount >= 1
             return InstallmentCalculation(1, 1, if (isPaid) 1 else 0, if (isPaid) 0 else 1, totalAmount, if (isPaid) "Quitado" else "Em andamento")
         }
 
-        // Diferença de meses entre o início e o mês da consulta
+        // Diferença de meses entre o início e o mês da consulta (Progresso Natural do Calendário)
         val monthsDiff = (queryYear - startYear) * 12 + (queryMonth - startMonth)
-        
-        if (monthsDiff < 0) {
+        val calendarProgress = monthsDiff + 1
+
+        // A parcela atual é o progresso do calendário OU o próximo após o que já foi pago manualmente
+        // Isso permite "pular" para o próximo mês ao clicar em Pagar Fatura
+        val current = if (calendarProgress > paidInstallmentsCount) calendarProgress else paidInstallmentsCount + 1
+
+        if (current <= 0) {
             return InstallmentCalculation(1, totalInstallments, 0, totalInstallments, instVal, "Futura")
         }
 
-        val elapsed = monthsDiff + 1 // +1 porque o mês de início já é a 1ª parcela
-        
-        return if (elapsed > totalInstallments) {
+        return if (current > totalInstallments) {
             InstallmentCalculation(totalInstallments, totalInstallments, totalInstallments, 0, instVal, "Quitado")
         } else {
-            InstallmentCalculation(elapsed, totalInstallments, monthsDiff, totalInstallments - elapsed, instVal, "Em andamento")
+            InstallmentCalculation(current, totalInstallments, current - 1, totalInstallments - current, instVal, "Em andamento")
         }
     }
 
