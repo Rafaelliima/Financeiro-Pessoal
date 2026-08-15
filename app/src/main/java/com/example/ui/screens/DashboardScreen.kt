@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -58,6 +59,19 @@ import com.example.ui.theme.HeroGradientStart
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.example.data.ReminderItem
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 
 @Composable
 fun DashboardScreen(
@@ -65,8 +79,14 @@ fun DashboardScreen(
     purchases: List<PurchaseItem> = emptyList(),
     subscriptions: List<SubscriptionItem> = emptyList(),
     dailyExpenses: List<DailyExpense> = emptyList(),
+    reminders: List<ReminderItem> = emptyList(),
+    onUpdateReminders: (List<ReminderItem>) -> Unit = {},
+    onPayReminder: (ReminderItem) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showAddReminderDialog by remember { mutableStateOf(false) }
+    var reminderToDelete by remember { mutableStateOf<ReminderItem?>(null) }
+
     val isDark = isSystemInDarkTheme()
     val heroBrush = Brush.verticalGradient(
         colors = if (isDark) {
@@ -310,6 +330,74 @@ fun DashboardScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.6f)
                     )
+                }
+            }
+        }
+
+        // SEÇÃO: LEMBRETES (Nova funcionalidade)
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Lembretes",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                TextButton(
+                    onClick = { showAddReminderDialog = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Outlined.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(4.dp))
+                    Text("Adicionar")
+                }
+            }
+
+            if (reminders.isEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                ) {
+                    Text(
+                        text = "Nenhum lembrete para este período.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(20.dp)
+                    )
+                }
+            } else {
+                val pendingReminders = reminders.filter { !it.isPaid }
+                val paidReminders = reminders.filter { it.isPaid }
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    pendingReminders.forEach { reminder ->
+                        ReminderRow(
+                            reminder = reminder,
+                            onPay = { onPayReminder(reminder) },
+                            onDelete = { reminderToDelete = reminder }
+                        )
+                    }
+                    if (paidReminders.isNotEmpty()) {
+                        Text(
+                            text = "Pagos",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                        )
+                        paidReminders.forEach { reminder ->
+                            ReminderRow(
+                                reminder = reminder,
+                                onPay = {},
+                                onDelete = { reminderToDelete = reminder }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -586,4 +674,158 @@ fun DashboardScreen(
         }
         Spacer(modifier = Modifier.height(88.dp))
     }
+
+    if (showAddReminderDialog) {
+        AddReminderDialog(
+            onDismiss = { showAddReminderDialog = false },
+            onConfirm = { newReminder ->
+                onUpdateReminders(reminders + newReminder)
+                showAddReminderDialog = false
+            }
+        )
+    }
+
+    reminderToDelete?.let { reminder ->
+        AlertDialog(
+            onDismissRequest = { reminderToDelete = null },
+            title = { Text("Excluir Lembrete") },
+            text = { Text("Deseja realmente excluir \"${reminder.name}\"?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onUpdateReminders(reminders.filter { it.id != reminder.id })
+                    reminderToDelete = null
+                }) {
+                    Text("Excluir", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { reminderToDelete = null }) {
+                    Text("Cancelar")
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    }
+}
+
+@Composable
+fun ReminderRow(
+    reminder: ReminderItem,
+    onPay: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val displayDate = remember(reminder.date) {
+        if (reminder.date.contains("-")) {
+            try {
+                val dateObj = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(reminder.date)
+                SimpleDateFormat("dd/MM/yyyy", Locale.US).format(dateObj!!)
+            } catch (e: Exception) { reminder.date }
+        } else {
+            reminder.date
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = reminder.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    textDecoration = if (reminder.isPaid) TextDecoration.LineThrough else null,
+                    color = if (reminder.isPaid) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "$displayDate • R$ ${String.format(Locale("pt", "BR"), "%.2f", reminder.value)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            if (!reminder.isPaid) {
+                IconButton(onClick = onPay, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Outlined.CheckCircle, contentDescription = "Pagar", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Outlined.Delete, contentDescription = "Excluir", tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+            }
+        }
+    }
+}
+
+@Composable
+fun AddReminderDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (ReminderItem) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var valueStr by remember { mutableStateOf("") }
+    var date by remember {
+        val cal = Calendar.getInstance()
+        mutableStateOf(SimpleDateFormat("dd/MM/yyyy", Locale.US).format(cal.time))
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Novo Lembrete") },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("O que pagar?") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = valueStr,
+                    onValueChange = { valueStr = it.replace(',', '.') },
+                    label = { Text("Valor (R$)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = date,
+                    onValueChange = { date = it },
+                    label = { Text("Data (DD/MM/AAAA)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val value = valueStr.toDoubleOrNull() ?: 0.0
+                if (name.isNotBlank() && value > 0) {
+                    val finalDate = try {
+                        val dateObj = SimpleDateFormat("dd/MM/yyyy", Locale.US).parse(date)
+                        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(dateObj!!)
+                    } catch (e: Exception) { date }
+                    onConfirm(ReminderItem(name = name, value = value, date = finalDate))
+                }
+            }) {
+                Text("Salvar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        },
+        containerColor = MaterialTheme.colorScheme.surface
+    )
 }

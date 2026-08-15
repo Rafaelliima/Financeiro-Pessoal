@@ -5,7 +5,7 @@ import java.util.UUID
 
 import com.example.ui.theme.ThemeMode
 
-const val CURRENT_VERSION = 12
+const val CURRENT_VERSION = 13
 
 data class GoogleAccountData(
     @get:PropertyName("isConnected") @set:PropertyName("isConnected") var isConnected: Boolean = false,
@@ -37,6 +37,7 @@ data class StorageData(
     val subscriptions: List<SubscriptionItem> = emptyList(),
     val cardPayments: List<CardPaymentItem> = emptyList(),
     val dailyExpenses: List<DailyExpense> = emptyList(),
+    val reminders: List<ReminderItem> = emptyList(),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val googleAccount: GoogleAccountData? = null,
     // Coleções preparadas para expansões futuras

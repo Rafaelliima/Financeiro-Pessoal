@@ -40,6 +40,8 @@ import com.example.auth.GoogleAccountRepository
 import com.example.data.AppVersionInfo
 import com.example.data.FirebaseManager
 import com.example.data.CardItem
+import com.example.data.DailyExpense
+import com.example.data.ReminderItem
 import com.example.data.PurchaseItem
 import com.example.data.SubscriptionItem
 import com.example.data.UpdateManager
@@ -187,6 +189,7 @@ fun MainAppStructure() {
                 purchases = loadResult.data?.purchases ?: storageData.purchases,
                 subscriptions = loadResult.data?.subscriptions ?: storageData.subscriptions,
                 dailyExpenses = loadResult.data?.dailyExpenses ?: storageData.dailyExpenses,
+                reminders = loadResult.data?.reminders ?: storageData.reminders,
                 themeMode = loadResult.data?.themeMode ?: storageData.themeMode
             )
             val userId = lastAccount?.accountId
@@ -216,6 +219,28 @@ fun MainAppStructure() {
                 delay(3000)
                 statusMessage = null
             }
+        }
+
+        fun handlePayReminder(reminder: ReminderItem) {
+            if (reminder.isPaid) return
+            
+            val updatedReminder = reminder.copy(isPaid = true)
+            val newExpense = DailyExpense(
+                name = reminder.name,
+                value = reminder.value,
+                date = reminder.date,
+                observation = "Pago via lembrete"
+            )
+            
+            val updatedReminders = storageData.reminders.map {
+                if (it.id == reminder.id) updatedReminder else it
+            }
+            val updatedExpenses = storageData.dailyExpenses + newExpense
+            
+            updateAndSaveData(storageData.copy(
+                reminders = updatedReminders,
+                dailyExpenses = updatedExpenses
+            ))
         }
 
         fun registerInvoicePayment(card: CardItem) {
@@ -278,6 +303,9 @@ fun MainAppStructure() {
                         purchases = storageData.purchases,
                         subscriptions = storageData.subscriptions,
                         dailyExpenses = storageData.dailyExpenses,
+                        reminders = storageData.reminders,
+                        onUpdateReminders = { newReminders -> updateAndSaveData(storageData.copy(reminders = newReminders)) },
+                        onPayReminder = ::handlePayReminder,
                         modifier = screenModifier
                     )
                     Screen.Purchases -> PurchasesScreen(
@@ -289,6 +317,7 @@ fun MainAppStructure() {
                         onUpdatePurchases = { newPurchases -> updateAndSaveData(storageData.copy(purchases = newPurchases)) },
                         onUpdateDailyExpenses = { newExpenses -> updateAndSaveData(storageData.copy(dailyExpenses = newExpenses)) },
                         onUpdateSubscriptions = { newSubs -> updateAndSaveData(storageData.copy(subscriptions = newSubs)) },
+                        onUpdateCards = { newCards -> updateAndSaveData(storageData.copy(cards = newCards)) },
                         onRegisterInvoicePayment = ::registerInvoicePayment,
                         modifier = screenModifier
                     )

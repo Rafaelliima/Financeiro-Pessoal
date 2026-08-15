@@ -71,6 +71,12 @@ data class PurchaseItem(
 
         // Diferença de meses entre o início e o mês da consulta (Progresso Natural do Calendário)
         val monthsDiff = (queryYear - startYear) * 12 + (queryMonth - startMonth)
+        
+        // Se a data de consulta for anterior à data de início, a compra é considerada Futura para aquele mês
+        if (monthsDiff < 0) {
+            return InstallmentCalculation(1, totalInstallments, 0, totalInstallments, 0.0, "Futura")
+        }
+
         val calendarProgress = monthsDiff + 1
 
         // A parcela atual é o progresso do calendário OU o próximo após o que já foi pago manualmente
@@ -78,7 +84,7 @@ data class PurchaseItem(
         val current = if (calendarProgress > paidInstallmentsCount) calendarProgress else paidInstallmentsCount + 1
 
         if (current <= 0) {
-            return InstallmentCalculation(1, totalInstallments, 0, totalInstallments, instVal, "Futura")
+            return InstallmentCalculation(1, totalInstallments, 0, totalInstallments, 0.0, "Futura")
         }
 
         return if (current > totalInstallments) {
@@ -163,6 +169,19 @@ data class DailyExpense(
     val source: DataSource = DataSource.MANUAL,
     val paymentMethod: PaymentMethod = PaymentMethod.CONTA,
     val observation: String? = null,
+    val createdAt: String? = null,
+    val updatedAt: String? = null
+)
+
+/**
+ * Representa um Lembrete de Pagamento.
+ */
+data class ReminderItem(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String = "",
+    val value: Double = 0.0,
+    val date: String = "",
+    @get:PropertyName("isPaid") @set:PropertyName("isPaid") var isPaid: Boolean = false,
     val createdAt: String? = null,
     val updatedAt: String? = null
 )

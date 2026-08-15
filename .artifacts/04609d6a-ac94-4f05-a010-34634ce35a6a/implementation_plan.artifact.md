@@ -1,63 +1,65 @@
-# Releitura Moderna e Personalização do App
+# Plano de Implementação: Sistema de Lembretes, Lógica de Faturas e Gestão de Cartões
 
-Este plano foca em transformar o visual "genérico" do aplicativo em uma interface moderna, sofisticada e personalizada, além de adicionar controle manual sobre o tema (Modo Escuro).
+Este plano detalha a adição de um sistema de lembretes, a correção da lógica de parcelamento e faturas, e a separação da gestão de cartões da visualização de faturas.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> O design passará por uma mudança radical de paleta e formas. O modo escuro deixará de ser o cinza padrão do Android para usar tons de azul profundo e grafite, com acentos vibrantes.
+> A lógica de faturas passará a ocultar compras cujo primeiro pagamento é futuro. Pagar a fatura do mês atual afetará apenas as compras que possuem parcelas vigentes no período.
+
+> [!NOTE]
+> Lembretes pagos serão convertidos automaticamente em "Gastos do Dia a Dia", mantendo o histórico de pagamento.
 
 ## Proposed Changes
 
 ---
 
-### Design System & Theme
+### 1. Sistema de Lembretes
 
-#### [MODIFY] [Color.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/ui/theme/Color.kt)
-- Redefinir paletas:
-    - **Escuro:** Fundo `#0D0F12` (azul-noite profundo), Superfícies `#161B22`, Acento `#38BDF8`.
-    - **Claro:** Fundo `#F1F5F9` (cinza azulado suave), Superfícies `#FFFFFF`, Acento `#0284C7`.
-- Adicionar cores de "Glassmorphism" (transparências calculadas).
+#### [MODIFY] [Models.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/data/Models.kt)
+- Adicionar data class `ReminderItem` com campos: `id`, `name`, `value`, `date`, `isPaid`.
 
-#### [MODIFY] [Theme.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/ui/theme/Theme.kt)
-- Ajustar `FinanceiroPessoalTheme` para aceitar um estado de `ThemeMode` (Claro, Escuro, Sistema).
-
-#### [MODIFY] [Type.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/ui/theme/Type.kt)
-- **Hierarquia Visual:** Refinar pesos (`FontWeight`) e espaçamentos (`lineHeight`, `letterSpacing`) para criar uma distinção clara entre informações primárias e secundárias.
-- **Legibilidade:** Aumentar o `lineHeight` do texto de corpo para dar "respiro" ao layout.
-- **Estilo Moderno:** Ajustar o `headlineLarge` para um visual mais condensado e impactante (estilo interface de bancos digitais).
-
----
-
-### UI Components Overhaul
+#### [MODIFY] [StorageData.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/data/StorageData.kt)
+- Adicionar `reminders: List<ReminderItem>` à classe `StorageData`.
+- Incrementar `CURRENT_VERSION` para 13.
 
 #### [MODIFY] [DashboardScreen.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/ui/screens/DashboardScreen.kt)
-- **Disposição de Textos:** Reorganizar os cards para que as informações mais importantes (valores) tenham destaque imediato, enquanto rótulos auxiliares usem fontes menores e opacidade reduzida.
-- Criar um card "Hero" para o saldo total com gradiente sutil.
-- Aumentar o `RoundedCornerShape` para `28.dp`.
-- Remover divisores pesados e usar elevação/bordas sutis.
-
-#### [MODIFY] [PurchasesScreen.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/ui/screens/PurchasesScreen.kt)
-- **Layout de Listas:** Melhorar o alinhamento das linhas de compra. Valores à direita em negrito, nomes à esquerda com subtítulos claros.
-- Estilizar as abas internas com animações de transição mais suaves.
-- Melhorar o visual dos cards de cartões (menus expansíveis) com cores de marca mais integradas.
+- Implementar a seção **Lembretes** com visual moderno.
+- Adicionar lógica para exibir apenas lembretes pendentes (ou todos, com distinção visual).
+- Adicionar callback `onPayReminder(ReminderItem)` que marcará como pago e converterá em gasto diário.
 
 ---
 
-### Features & Settings
+### 2. Correção de Lógica de Faturas e Parcelas
+
+#### [MODIFY] [Models.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/data/Models.kt)
+- Refinar `calculateInstallments` para garantir que compras com `startMonth/Year` no futuro retornem status "Futura" e não apareçam nos cálculos do mês atual.
+
+#### [MODIFY] [PurchasesScreen.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/ui/screens/PurchasesScreen.kt)
+- Filtrar compras na aba "Por Cartão" para exibir apenas as que pertencem ao mês de referência (Remover compras futuras da lista da fatura atual).
 
 #### [MODIFY] [MainActivity.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/MainActivity.kt)
-- Gerenciar o estado global do tema (`themeMode`) e persistir no `JsonStorageManager`.
+- Atualizar `registerInvoicePayment` para incrementar `paidInstallmentsCount` **apenas** se a compra tiver uma parcela ativa no mês que está sendo pago.
 
-#### [MODIFY] [SettingsScreen.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/ui/screens/SettingsScreen.kt)
-- Adicionar seção "Aparência" com um Switch/Toggle para o Modo Escuro.
+---
+
+### 3. Gerenciamento de Cartões
+
+#### [MODIFY] [PurchasesScreen.kt](file:///C:/Users/jrafa/OneDrive/Documents/GitHub/Financeiro-Pessoal/app/src/main/java/com/example/ui/screens/PurchasesScreen.kt)
+- Adicionar o botão **⚙️ Configurações de cartões** abaixo da lista de cartões na aba "Por Cartão".
+- Implementar um novo `ModalBottomSheet` ou Dialog dedicado exclusivamente para Adicionar, Editar e Excluir cartões.
 
 ---
 
 ## Verification Plan
 
+### Automated Tests
+- Validar via unit test que `calculateInstallments` retorna status correto para datas futuras.
+- Simular pagamento de fatura em `MainActivity` e conferir se compras futuras permanecem inalteradas.
+
 ### Manual Verification
-1. Abrir **Ajustes** e alternar o Modo Escuro manualmente.
-2. Verificar se as cores de azul profundo são aplicadas corretamente no tema escuro.
-3. Observar se os cards do **Dashboard** possuem cantos mais arredondados e visual limpo.
-4. Validar se o gradiente no saldo principal está legível em ambos os temas.
+1. Criar lembrete e verificar se o total do Dashboard não muda.
+2. Pagar o lembrete e verificar se ele aparece em "Dia a Dia" e altera o saldo.
+3. Cadastrar compra para o mês seguinte e verificar se ela está oculta na fatura deste mês.
+4. Pagar fatura atual e verificar se a compra futura continua na parcela 1 para o mês que vem.
+5. Acessar "Configurações de cartões" e editar o nome de um cartão.

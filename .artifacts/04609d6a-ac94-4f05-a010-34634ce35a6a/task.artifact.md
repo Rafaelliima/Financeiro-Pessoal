@@ -1,8 +1,7 @@
-- [x] Redefinir paleta de cores moderna em `Color.kt`
-- [x] Atualizar `Theme.kt` para suportar `ThemeMode` manual
-- [x] Refinar tipografia e hierarquia de textos em `Type.kt`
-- [x] Modernizar layout e disposição de textos no `DashboardScreen.kt`
-- [x] Ajustar layout de listas e abas na `PurchasesScreen.kt`
-- [x] Adicionar controle de tema na `MainActivity.kt` e `SettingsScreen.kt`
-- [x] Verificar consistência visual e legibilidade
-- [x] Atualizar versão do projeto para 1.5 (versão 4)
+- [ ] Atualizar `Models.kt` com `ReminderItem` e refinar `calculateInstallments`
+- [ ] Atualizar `StorageData.kt` para incluir `reminders` e incrementar versão
+- [ ] Implementar seção de Lembretes no `DashboardScreen.kt`
+- [ ] Corrigir filtros de compras futuras no `PurchasesScreen.kt`
+- [ ] Ajustar lógica de pagamento de fatura na `MainActivity.kt`
+- [ ] Implementar "Configurações de Cartões" no `PurchasesScreen.kt`
+- [ ] Verificar todas as regras de negócio e persistência

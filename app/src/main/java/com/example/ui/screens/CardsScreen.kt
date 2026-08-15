@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -479,7 +482,12 @@ private fun CardFormDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -496,7 +504,7 @@ private fun CardFormDialog(
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Cor personalizada (opcional):",
+                        text = "Cor do cartão:",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -506,10 +514,14 @@ private fun CardFormDialog(
                         contentPadding = PaddingValues(vertical = 4.dp)
                     ) {
                         items(presetColors) { hex ->
-                            val color = Color(android.graphics.Color.parseColor(hex))
+                            val color = try {
+                                Color(android.graphics.Color.parseColor(hex))
+                            } catch (e: Exception) {
+                                Color.Gray
+                            }
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(44.dp)
                                     .clip(CircleShape)
                                     .background(color)
                                     .border(
@@ -518,7 +530,7 @@ private fun CardFormDialog(
                                         shape = CircleShape
                                     )
                                     .clickable {
-                                        selectedColorHex = if (selectedColorHex == hex) null else hex
+                                        selectedColorHex = hex
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -527,7 +539,7 @@ private fun CardFormDialog(
                                         imageVector = Icons.Outlined.Check,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             }

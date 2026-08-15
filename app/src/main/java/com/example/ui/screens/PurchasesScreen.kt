@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,10 +17,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.Delete
@@ -55,6 +61,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.SheetState
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -99,6 +106,9 @@ import com.example.ui.theme.PrimaryAccent
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.SuccessGreen
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.vector.ImageVector
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -121,6 +131,7 @@ fun PurchasesScreen(
     onUpdatePurchases: (List<PurchaseItem>) -> Unit,
     onUpdateDailyExpenses: (List<DailyExpense>) -> Unit = {},
     onUpdateSubscriptions: (List<SubscriptionItem>) -> Unit = {},
+    onUpdateCards: (List<CardItem>) -> Unit = {},
     onRegisterInvoicePayment: (CardItem) -> Unit = {},
     statusMessage: String? = null,
     isErrorStatus: Boolean = false,
@@ -131,6 +142,7 @@ fun PurchasesScreen(
     var isHistoryExpanded by remember { mutableStateOf(false) } // Recolhido por padrão
     var cardForPaymentsHistory by remember { mutableStateOf<CardItem?>(null) }
     var expandedCardNames by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showCardSettings by remember { mutableStateOf(false) }
 
     var showAddPurchaseDialog by remember { mutableStateOf(false) }
     var purchaseToEdit by remember { mutableStateOf<PurchaseItem?>(null) }
@@ -148,6 +160,11 @@ fun PurchasesScreen(
     val purchaseSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val expenseSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val subscriptionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val cardSettingsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val currentCalForFilter = Calendar.getInstance()
+    val curM = currentCalForFilter.get(Calendar.MONTH) + 1
+    val curY = currentCalForFilter.get(Calendar.YEAR)
 
     val activePurchases = remember(purchases) {
         purchases.filter { !it.isCurrentlyQuitada() }
@@ -156,8 +173,15 @@ fun PurchasesScreen(
         purchases.filter { it.isCurrentlyQuitada() }
     }
 
+    // Filtragem de compras por cartão respeitando compras futuras
     val groupedActivePurchases = remember(activePurchases) {
-        activePurchases.groupBy { if (it.cardName.isNotBlank()) it.cardName else "Sem cartão" }
+        activePurchases
+            .filter { p ->
+                // Só mostra na lista se a compra já começou (ou se já foi paga alguma parcela)
+                val monthsDiff = (curY - p.startYear) * 12 + (curM - p.startMonth)
+                monthsDiff >= 0 || p.paidInstallmentsCount > 0
+            }
+            .groupBy { if (it.cardName.isNotBlank()) it.cardName else "Sem cartão" }
     }
 
     Box(
@@ -262,20 +286,22 @@ fun PurchasesScreen(
                     )
                 }
 
-                if (purchases.isEmpty()) {
-                    EmptyStateCard(
-                        icon = Icons.Outlined.ShoppingBag,
-                        title = "Nenhuma compra registrada",
-                        description = "Clique no botão abaixo para cadastrar uma nova compra de cartão."
-                    )
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .animateContentSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateContentSize(),
+                    contentPadding = PaddingValues(bottom = 88.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (purchases.isEmpty()) {
+                        item(key = "empty_purchases") {
+                            EmptyStateCard(
+                                icon = Icons.Outlined.ShoppingBag,
+                                title = "Nenhuma compra registrada",
+                                description = "Clique no botão abaixo para cadastrar uma nova compra de cartão."
+                            )
+                        }
+                    } else {
                         // 1. Seção de Compras Ativas (Cartões como menus expansíveis)
                         if (purchasesFilter == "Todas" || purchasesFilter == "Ativas") {
                             if (activePurchases.isEmpty()) {
@@ -527,6 +553,20 @@ fun PurchasesScreen(
                             }
                         }
                     }
+
+                    // Botão de Configurações de Cartões - SEMPRE DISPONÍVEL AO FINAL
+                    item(key = "card_settings_footer") {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { showCardSettings = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.Outlined.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.size(8.dp))
+                            Text("Configurações de cartões", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             } else if (selectedTabIndex == 1) {
                 // Conteúdo da Aba 1: Dia a Dia
@@ -615,6 +655,24 @@ fun PurchasesScreen(
                 .padding(20.dp)
                 .testTag("universal_add_button")
         )
+    }
+
+    // Card Settings Sheet
+    if (showCardSettings) {
+        ModalBottomSheet(
+            onDismissRequest = { showCardSettings = false },
+            sheetState = cardSettingsSheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            dragHandle = { BottomSheetDefaults.DragHandle() }
+        ) {
+            CardSettingsContent(
+                cards = cards,
+                onUpdateCards = onUpdateCards,
+                onDismiss = {
+                    scope.launch { cardSettingsSheetState.hide() }.invokeOnCompletion { showCardSettings = false }
+                }
+            )
+        }
     }
 
     // Add Purchase Sheet
@@ -824,6 +882,221 @@ fun PurchasesScreen(
 }
 
 @Composable
+private fun CardSettingsContent(
+    cards: List<CardItem>,
+    onUpdateCards: (List<CardItem>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var cardToEdit by remember { mutableStateOf<CardItem?>(null) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var cardToDelete by remember { mutableStateOf<CardItem?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(20.dp)
+            .navigationBarsPadding(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Configurações de Cartões", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            IconButton(onClick = { showAddDialog = true }) {
+                Icon(Icons.Outlined.Add, contentDescription = "Novo Cartão")
+            }
+        }
+
+        if (cards.isEmpty()) {
+            Text("Nenhum cartão cadastrado.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                itemsIndexed(cards) { index, card ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(android.graphics.Color.parseColor(card.colorHex ?: "#CCCCCC")))
+                        )
+                        Text(card.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        IconButton(onClick = { cardToEdit = card }) {
+                            Icon(Icons.Outlined.Edit, contentDescription = "Editar", modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(onClick = { cardToDelete = card }) {
+                            Icon(Icons.Outlined.Delete, contentDescription = "Excluir", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    if (index < cards.size - 1) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
+            }
+        }
+        
+        Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Concluído")
+        }
+    }
+
+    if (showAddDialog || cardToEdit != null) {
+        CardFormDialog(
+            title = if (cardToEdit != null) "Editar Cartão" else "Novo Cartão",
+            initialName = cardToEdit?.name ?: "",
+            initialColor = cardToEdit?.colorHex,
+            onDismiss = {
+                showAddDialog = false
+                cardToEdit = null
+            },
+            onConfirm = { name, color ->
+                if (cardToEdit != null) {
+                    onUpdateCards(cards.map { if (it.id == cardToEdit!!.id) it.copy(name = name, colorHex = color) else it })
+                } else {
+                    onUpdateCards(cards + CardItem(name = name, colorHex = color))
+                }
+                showAddDialog = false
+                cardToEdit = null
+            }
+        )
+    }
+
+    cardToDelete?.let { card ->
+        AlertDialog(
+            onDismissRequest = { cardToDelete = null },
+            title = { Text("Excluir Cartão") },
+            text = { Text("Deseja realmente excluir o cartão \"${card.name}\"?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onUpdateCards(cards.filter { it.id != card.id })
+                    cardToDelete = null
+                }) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { cardToDelete = null }) { Text("Cancelar") }
+            },
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CardFormDialog(
+    title: String,
+    initialName: String,
+    initialColor: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String?) -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var selectedColorHex by remember { mutableStateOf(initialColor ?: "#8A05BE") }
+
+    val presetColors = listOf(
+        "#8A05BE", // Nubank
+        "#FF7800", // Itaú
+        "#FF7A00", // Inter
+        "#EC0000", // Santander
+        "#B20C15", // Bradesco
+        "#0038A8", // BB
+        "#005CA9", // Caixa
+        "#00A335", // Mercado Pago
+        "#111111", // Preto
+        "#6B7280"  // Cinza
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, style = MaterialTheme.typography.titleMedium, color = TextPrimary) },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nome do cartão", style = MaterialTheme.typography.bodySmall) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryAccent,
+                        focusedLabelColor = PrimaryAccent
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Cor do cartão:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(vertical = 4.dp)
+                    ) {
+                        items(presetColors) { hex ->
+                            val color = try {
+                                Color(android.graphics.Color.parseColor(hex))
+                            } catch (e: Exception) {
+                                Color.Gray
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .border(
+                                        width = if (selectedColorHex == hex) 3.dp else 0.dp,
+                                        color = if (selectedColorHex == hex) PrimaryAccent else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable {
+                                        selectedColorHex = hex
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (selectedColorHex == hex) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Check,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (name.isNotBlank()) onConfirm(name, selectedColorHex) },
+                enabled = name.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryAccent)
+            ) {
+                Text("Salvar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar", color = TextSecondary)
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surface
+    )
+}
+
+@Composable
 private fun PurchaseRowItem(
     purchase: PurchaseItem,
     isCardPaidThisMonth: Boolean = false,
@@ -955,6 +1228,7 @@ private fun PurchaseFormContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(20.dp)
+            .verticalScroll(rememberScrollState())
             .imePadding()
             .navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1515,6 +1789,7 @@ private fun SubscriptionFormContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(20.dp)
+            .verticalScroll(rememberScrollState())
             .imePadding()
             .navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1679,8 +1954,18 @@ private fun DailyExpenseRowItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                val displayDate = remember(expense.date) {
+                    if (expense.date.contains("-")) {
+                        try {
+                            val dateObj = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(expense.date)
+                            SimpleDateFormat("dd/MM/yyyy", Locale.US).format(dateObj!!)
+                        } catch (e: Exception) { expense.date }
+                    } else {
+                        expense.date
+                    }
+                }
                 Text(
-                    text = expense.date,
+                    text = displayDate,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1740,16 +2025,29 @@ private fun DailyExpenseFormContent(
     onDismiss: () -> Unit,
     onConfirm: (DailyExpense) -> Unit
 ) {
+    val dateDisplayFormat = remember { SimpleDateFormat("dd/MM/yyyy", Locale.US) }
+    val dateStorageFormat = remember { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
+
     val todayFormatted = remember {
-        val cal = Calendar.getInstance()
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(cal.time)
+        dateDisplayFormat.format(Calendar.getInstance().time)
     }
 
     var name by remember { mutableStateOf(initialExpense?.name ?: "") }
     var valueStr by remember {
         mutableStateOf(initialExpense?.let { String.format(Locale.US, "%.2f", it.value) } ?: "")
     }
-    var date by remember { mutableStateOf(initialExpense?.date ?: todayFormatted) }
+    var date by remember {
+        val initial = initialExpense?.date
+        val formatted = if (initial != null && initial.contains("-")) {
+            try {
+                val d = dateStorageFormat.parse(initial)
+                dateDisplayFormat.format(d!!)
+            } catch (e: Exception) { initial }
+        } else {
+            initial ?: todayFormatted
+        }
+        mutableStateOf(formatted)
+    }
     var paymentMethod by remember { mutableStateOf(initialExpense?.paymentMethod ?: PaymentMethod.CONTA) }
     var observation by remember { mutableStateOf(initialExpense?.observation ?: "") }
 
@@ -1759,6 +2057,7 @@ private fun DailyExpenseFormContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(20.dp)
+            .verticalScroll(rememberScrollState())
             .imePadding()
             .navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1809,7 +2108,7 @@ private fun DailyExpenseFormContent(
             OutlinedTextField(
                 value = date,
                 onValueChange = { date = it },
-                label = { Text("Data (AAAA-MM-DD)", style = MaterialTheme.typography.bodySmall) },
+                label = { Text("Data (DD/MM/AAAA)", style = MaterialTheme.typography.bodySmall) },
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = PrimaryAccent,
@@ -1903,11 +2202,21 @@ private fun DailyExpenseFormContent(
                         return@Button
                     }
 
+                    val dateStorageFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                    val dateDisplayFormat = SimpleDateFormat("dd/MM/yyyy", Locale.US)
+                    
+                    val finalDate = try {
+                        val d = dateDisplayFormat.parse(date.trim())
+                        dateStorageFormat.format(d!!)
+                    } catch (e: Exception) {
+                        date.trim()
+                    }
+
                     val finalExpense = DailyExpense(
                         id = initialExpense?.id ?: UUID.randomUUID().toString(),
                         name = name.trim(),
                         value = amount,
-                        date = date.trim(),
+                        date = finalDate,
                         source = initialExpense?.source ?: DataSource.MANUAL,
                         paymentMethod = paymentMethod,
                         observation = observation.trim().ifBlank { null }
