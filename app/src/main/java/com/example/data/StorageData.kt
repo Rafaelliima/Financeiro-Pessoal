@@ -14,7 +14,9 @@ data class GoogleAccountData(
     val photoUrl: String? = null,
     val connectedAt: String? = null,
     val accountId: String? = null,
-    val idToken: String? = null
+    val idToken: String? = null,
+    val customDisplayName: String? = null,
+    val customPhotoPath: String? = null
 )
 
 data class CardPaymentItem(
@@ -39,6 +41,7 @@ data class StorageData(
     val dailyExpenses: List<DailyExpense> = emptyList(),
     val reminders: List<ReminderItem> = emptyList(),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val selectedPalette: String = "OBSIDIAN",
     val googleAccount: GoogleAccountData? = null,
     // Coleções preparadas para expansões futuras
     val categories: List<Any> = emptyList(),

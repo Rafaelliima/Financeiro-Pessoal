@@ -26,6 +26,7 @@ object AtomicFileWriter {
                         put("id", card.id)
                         put("name", card.name)
                         card.colorHex?.let { put("colorHex", it) }
+                        card.bankId?.let { put("bankId", it) }
                         put("source", card.source.name)
                         card.createdAt?.let { put("createdAt", it) }
                         card.updatedAt?.let { put("updatedAt", it) }
@@ -66,6 +67,9 @@ object AtomicFileWriter {
                         put("cardId", sub.cardId)
                         put("cardName", sub.cardName)
                         put("source", sub.source.name)
+                        put("isShared", sub.isShared)
+                        sub.sharedWith?.let { put("sharedWith", it) }
+                        put("receivedAmount", sub.receivedAmount)
                         sub.createdAt?.let { put("createdAt", it) }
                         sub.updatedAt?.let { put("updatedAt", it) }
                     })
@@ -97,6 +101,7 @@ object AtomicFileWriter {
                         put("source", de.source.name)
                         put("paymentMethod", de.paymentMethod.name)
                         de.observation?.let { put("observation", it) }
+                        de.reminderId?.let { put("reminderId", it) }
                         de.createdAt?.let { put("createdAt", it) }
                         de.updatedAt?.let { put("updatedAt", it) }
                     })
@@ -115,6 +120,32 @@ object AtomicFileWriter {
                         acc.idToken?.let { put("idToken", it) }
                     })
                 }
+
+                put("reminders", JSONArray().apply {
+                    data.reminders.forEach { r ->
+                        put(JSONObject().apply {
+                            put("id", r.id)
+                            put("name", r.name)
+                            put("value", r.value)
+                            put("date", r.date)
+                            put("isPaid", r.isPaid)
+                            put("isRecurring", r.isRecurring)
+                            put("recurrenceFrequency", r.recurrenceFrequency)
+                            put("totalOccurrences", r.totalOccurrences)
+                            put("currentOccurrence", r.currentOccurrence)
+                            r.paymentMethod?.let { put("paymentMethod", it) }
+                            r.recurrenceGroupId?.let { put("recurrenceGroupId", it) }
+                            put("notifyOnDueDate", r.notifyOnDueDate)
+                            put("notifyOneDayBefore", r.notifyOneDayBefore)
+                            r.createdAt?.let { put("createdAt", it) }
+                            r.updatedAt?.let { put("updatedAt", it) }
+                        })
+                    }
+                })
+
+                // Theme
+                put("themeMode", data.themeMode.name)
+                put("selectedPalette", data.selectedPalette)
 
                 // Coleções de expansão futura
                 put("categories", JSONArray())

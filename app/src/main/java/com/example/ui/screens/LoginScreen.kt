@@ -24,6 +24,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import com.example.ui.theme.BackgroundLight
 import com.example.ui.theme.PrimaryAccent
 import com.example.ui.theme.TextPrimary
@@ -47,16 +51,27 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            // Mascote Oficial Grana+ (Capivara Colorida Pierre)
+            Image(
+                painter = painterResource(id = com.example.R.drawable.ic_mascot_capivara),
+                contentDescription = "Mascote Grana+",
+                modifier = Modifier
+                    .size(112.dp)
+                    .clip(CircleShape)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
             // Título
             Text(
-                text = "Financeiro\nPessoal",
+                text = "Grana+",
                 style = MaterialTheme.typography.headlineLarge,
                 color = TextPrimary,
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.ExtraBold
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = "Sua vida financeira na nuvem, de forma simples e automática.",

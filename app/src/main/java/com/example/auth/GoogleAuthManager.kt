@@ -23,15 +23,32 @@ import java.util.Locale
  */
 class GoogleAuthManager(private val context: Context) {
 
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val auth: FirebaseAuth? by lazy {
+        try {
+            FirebaseAuth.getInstance()
+        } catch (e: Exception) {
+            null
+        }
+    }
 
-    private val gso: GoogleSignInOptions = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-        .requestEmail()
-        .requestProfile()
-        .requestIdToken(context.getString(com.example.R.string.default_web_client_id))
-        .build()
+    private val gso: GoogleSignInOptions by lazy {
+        val webClientId = try {
+            context.getString(com.example.R.string.default_web_client_id)
+        } catch (e: Exception) {
+            ""
+        }
+        val builder = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestProfile()
+        if (webClientId.isNotBlank()) {
+            builder.requestIdToken(webClientId)
+        }
+        builder.build()
+    }
 
-    private val googleSignInClient: GoogleSignInClient = GoogleSignIn.getClient(context, gso)
+    private val googleSignInClient: GoogleSignInClient by lazy {
+        GoogleSignIn.getClient(context, gso)
+    }
 
     /**
      * Retorna a Intent oficial de autenticação para ser lançada pelo ActivityResultLauncher.
@@ -54,7 +71,8 @@ class GoogleAuthManager(private val context: Context) {
             if (account != null) {
                 // 1. Autentica no Firebase usando o ID Token do Google
                 val credential = GoogleAuthProvider.getCredential(account.idToken, null)
-                auth.signInWithCredential(credential).await()
+                val firebaseAuth = auth ?: return Result.failure(Exception("Serviço de autenticação indisponível."))
+                firebaseAuth.signInWithCredential(credential).await()
 
                 // 2. Coleta dados para o repositório local
                 val formattedDate = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "BR")).format(Date())
@@ -64,7 +82,7 @@ class GoogleAuthManager(private val context: Context) {
                     userName = account.displayName ?: "Usuário Google",
                     photoUrl = account.photoUrl?.toString(),
                     connectedAt = formattedDate,
-                    accountId = auth.currentUser?.uid ?: account.id,
+                    accountId = firebaseAuth.currentUser?.uid ?: account.id,
                     idToken = account.idToken
                 )
                 Result.success(accountData)
@@ -97,7 +115,7 @@ class GoogleAuthManager(private val context: Context) {
             userName = account.displayName ?: "Usuário Google",
             photoUrl = account.photoUrl?.toString(),
             connectedAt = formattedDate,
-            accountId = auth.currentUser?.uid ?: account.id,
+            accountId = auth?.currentUser?.uid ?: account.id,
             idToken = account.idToken
         )
     }
@@ -106,7 +124,7 @@ class GoogleAuthManager(private val context: Context) {
      * Desconecta a conta Google e Firebase, revogando o acesso da sessão oficial.
      */
     fun signOut(onComplete: (Boolean) -> Unit) {
-        auth.signOut()
+        auth?.signOut()
         googleSignInClient.signOut().addOnCompleteListener { task ->
             googleSignInClient.revokeAccess().addOnCompleteListener {
                 onComplete(task.isSuccessful)

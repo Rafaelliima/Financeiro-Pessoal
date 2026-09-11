@@ -24,7 +24,14 @@ data class AppVersionInfo(
 )
 
 class UpdateManager(private val context: Context) {
-    private val db = FirebaseFirestore.getInstance()
+    private val db: FirebaseFirestore? by lazy {
+        try {
+            FirebaseFirestore.getInstance()
+        } catch (e: Exception) {
+            Log.w("UpdateManager", "FirebaseFirestore not initialized: ${e.message}")
+            null
+        }
+    }
     private val TAG = "UpdateManager"
 
     /**
@@ -32,8 +39,9 @@ class UpdateManager(private val context: Context) {
      */
     suspend fun checkForUpdate(): AppVersionInfo? {
         return try {
+            val database = db ?: return null
             Log.d(TAG, "Iniciando consulta ao Firestore em config/app_version...")
-            val doc = db.collection("config").document("app_version").get().await()
+            val doc = database.collection("config").document("app_version").get().await()
             if (doc.exists()) {
                 val data = doc.data
                 Log.d(TAG, "Dados brutos do Firestore: $data")
@@ -107,7 +115,7 @@ class UpdateManager(private val context: Context) {
         }
 
         val request = DownloadManager.Request(Uri.parse(cleanUrl))
-            .setTitle("Atualizando Financeiro Pessoal")
+            .setTitle("Atualizando Grana+")
             .setDescription("Baixando nova versão do GitHub...")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)

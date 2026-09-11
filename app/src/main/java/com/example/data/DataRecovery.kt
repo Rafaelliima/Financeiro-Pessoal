@@ -26,6 +26,7 @@ object DataRecovery {
         val subscriptions = mutableListOf<SubscriptionItem>()
         val cardPayments = mutableListOf<CardPaymentItem>()
         val dailyExpenses = mutableListOf<DailyExpense>()
+        val reminders = mutableListOf<ReminderItem>()
 
         try {
             val root = JSONObject(rawContent)
@@ -42,11 +43,17 @@ object DataRecovery {
                         val sourceStr = cObj.optString("source", DataSource.MANUAL.name)
                         val createdAt = cObj.optString("createdAt", null)
                         val updatedAt = cObj.optString("updatedAt", null)
+                        val bankId = if (cObj.has("bankId") && !cObj.isNull("bankId")) {
+                            cObj.optString("bankId")
+                        } else {
+                            com.example.data.bank.BankRegistry.getBankForCard(name, null, colorHex).id
+                        }
                         cards.add(
                             CardItem(
                                 id = id,
                                 name = name,
                                 colorHex = colorHex,
+                                bankId = bankId,
                                 source = DataSource.fromString(sourceStr),
                                 createdAt = createdAt,
                                 updatedAt = updatedAt
@@ -115,6 +122,9 @@ object DataRecovery {
                         val sourceStr = sObj.optString("source", DataSource.MANUAL.name)
                         val createdAt = sObj.optString("createdAt", null)
                         val updatedAt = sObj.optString("updatedAt", null)
+                        val isShared = sObj.optBoolean("isShared", sObj.optBoolean("shared", false))
+                        val sharedWith = if (sObj.has("sharedWith")) sObj.optString("sharedWith", null) else null
+                        val receivedAmount = sObj.optDouble("receivedAmount", 0.0)
 
                         subscriptions.add(
                             SubscriptionItem(
@@ -125,7 +135,10 @@ object DataRecovery {
                                 cardName = cardName,
                                 source = DataSource.fromString(sourceStr),
                                 createdAt = createdAt,
-                                updatedAt = updatedAt
+                                updatedAt = updatedAt,
+                                isShared = isShared,
+                                sharedWith = sharedWith,
+                                receivedAmount = receivedAmount
                             )
                         )
                     }
@@ -171,6 +184,7 @@ object DataRecovery {
                         val sourceStr = deObj.optString("source", DataSource.MANUAL.name)
                         val pmStr = deObj.optString("paymentMethod", PaymentMethod.CONTA.name)
                         val observation = deObj.optString("observation", null)
+                        val reminderId = deObj.optString("reminderId", null)
                         val createdAt = deObj.optString("createdAt", null)
                         val updatedAt = deObj.optString("updatedAt", null)
 
@@ -183,6 +197,53 @@ object DataRecovery {
                                 source = DataSource.fromString(sourceStr),
                                 paymentMethod = PaymentMethod.fromString(pmStr),
                                 observation = observation,
+                                reminderId = reminderId,
+                                createdAt = createdAt,
+                                updatedAt = updatedAt
+                            )
+                        )
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // Extração defensiva de lembretes
+            val remArray = root.optJSONArray("reminders") ?: JSONArray()
+            for (i in 0 until remArray.length()) {
+                try {
+                    val rObj = remArray.optJSONObject(i) ?: continue
+                    val name = rObj.optString("name", "")
+                    if (name.isNotBlank()) {
+                        val id = rObj.optString("id", UUID.randomUUID().toString())
+                        val value = rObj.optDouble("value", 0.0)
+                        val rawDate = rObj.optString("date", "")
+                        val normalizedDate = ReminderSyncUtils.normalizeDate(rawDate)
+                        val isPaid = rObj.optBoolean("isPaid", false)
+                        val isRecurring = rObj.optBoolean("isRecurring", false)
+                        val recurrenceFrequency = rObj.optString("recurrenceFrequency", "MONTHLY")
+                        val totalOccurrences = rObj.optInt("totalOccurrences", 1)
+                        val currentOccurrence = rObj.optInt("currentOccurrence", 1)
+                        val paymentMethod = if (rObj.has("paymentMethod")) rObj.optString("paymentMethod", null) else null
+                        val recurrenceGroupId = if (rObj.has("recurrenceGroupId")) rObj.optString("recurrenceGroupId", null) else null
+                        val notifyOnDueDate = rObj.optBoolean("notifyOnDueDate", true)
+                        val notifyOneDayBefore = rObj.optBoolean("notifyOneDayBefore", false)
+                        val createdAt = rObj.optString("createdAt", null)
+                        val updatedAt = rObj.optString("updatedAt", null)
+
+                        reminders.add(
+                            ReminderItem(
+                                id = id,
+                                name = name,
+                                value = value,
+                                date = normalizedDate,
+                                isPaid = isPaid,
+                                isRecurring = isRecurring,
+                                recurrenceFrequency = recurrenceFrequency,
+                                totalOccurrences = totalOccurrences,
+                                currentOccurrence = currentOccurrence,
+                                paymentMethod = paymentMethod,
+                                recurrenceGroupId = recurrenceGroupId,
+                                notifyOnDueDate = notifyOnDueDate,
+                                notifyOneDayBefore = notifyOneDayBefore,
                                 createdAt = createdAt,
                                 updatedAt = updatedAt
                             )
@@ -194,9 +255,9 @@ object DataRecovery {
             // Caso a raiz do JSON esteja inacessível
         }
 
-        val totalRecovered = cards.size + purchases.size + subscriptions.size + dailyExpenses.size
+        val totalRecovered = cards.size + purchases.size + subscriptions.size + dailyExpenses.size + reminders.size
         val details = if (totalRecovered > 0) {
-            "Recuperados com sucesso: ${cards.size} cartões, ${purchases.size} compras, ${subscriptions.size} assinaturas, ${dailyExpenses.size} gastos diários."
+            "Recuperados com sucesso: ${cards.size} cartões, ${purchases.size} compras, ${subscriptions.size} assinaturas, ${dailyExpenses.size} gastos diários, ${reminders.size} lembretes."
         } else {
             "Não foi possível recuperar dados legíveis do arquivo."
         }
@@ -208,7 +269,8 @@ object DataRecovery {
                 purchases = purchases,
                 subscriptions = subscriptions,
                 cardPayments = cardPayments,
-                dailyExpenses = dailyExpenses
+                dailyExpenses = dailyExpenses,
+                reminders = reminders
             ),
             recoveredCount = totalRecovered,
             details = details

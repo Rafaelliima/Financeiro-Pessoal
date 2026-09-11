@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
+import com.example.ui.theme.ThemeMode
 
 object StorageReader {
 
@@ -57,12 +58,19 @@ object StorageReader {
                 val createdAt = if (cardObj.has("createdAt")) cardObj.optString("createdAt", null) else null
                 val updatedAt = if (cardObj.has("updatedAt")) cardObj.optString("updatedAt", null) else null
 
+                val bankId = if (cardObj.has("bankId") && !cardObj.isNull("bankId")) {
+                    cardObj.optString("bankId")
+                } else {
+                    com.example.data.bank.BankRegistry.getBankForCard(name, null, colorHex).id
+                }
+
                 if (name.isNotBlank()) {
                     cardsList.add(
                         CardItem(
                             id = id,
                             name = name,
                             colorHex = colorHex,
+                            bankId = bankId,
                             source = DataSource.fromString(sourceStr),
                             createdAt = createdAt,
                             updatedAt = updatedAt
@@ -129,6 +137,10 @@ object StorageReader {
                 val createdAt = if (subObj.has("createdAt")) subObj.optString("createdAt", null) else null
                 val updatedAt = if (subObj.has("updatedAt")) subObj.optString("updatedAt", null) else null
 
+                val isShared = subObj.optBoolean("isShared", subObj.optBoolean("shared", false))
+                val sharedWith = if (subObj.has("sharedWith")) subObj.optString("sharedWith", null) else null
+                val receivedAmount = subObj.optDouble("receivedAmount", 0.0)
+
                 if (name.isNotBlank()) {
                     subscriptionsList.add(
                         SubscriptionItem(
@@ -139,7 +151,10 @@ object StorageReader {
                             cardName = cardName,
                             source = DataSource.fromString(sourceStr),
                             createdAt = createdAt,
-                            updatedAt = updatedAt
+                            updatedAt = updatedAt,
+                            isShared = isShared,
+                            sharedWith = sharedWith,
+                            receivedAmount = receivedAmount
                         )
                     )
                 }
@@ -181,7 +196,9 @@ object StorageReader {
                 val value = deObj.optDouble("value", 0.0)
                 val date = deObj.optString("date", "")
                 val sourceStr = deObj.optString("source", DataSource.MANUAL.name)
+                val pmStr = deObj.optString("paymentMethod", PaymentMethod.CONTA.name)
                 val observation = if (deObj.has("observation") && !deObj.isNull("observation")) deObj.optString("observation") else null
+                val reminderId = if (deObj.has("reminderId") && !deObj.isNull("reminderId")) deObj.optString("reminderId") else null
                 val createdAt = if (deObj.has("createdAt")) deObj.optString("createdAt", null) else null
                 val updatedAt = if (deObj.has("updatedAt")) deObj.optString("updatedAt", null) else null
 
@@ -193,7 +210,54 @@ object StorageReader {
                             value = value,
                             date = date,
                             source = DataSource.fromString(sourceStr),
+                            paymentMethod = PaymentMethod.fromString(pmStr),
                             observation = observation,
+                            reminderId = reminderId,
+                            createdAt = createdAt,
+                            updatedAt = updatedAt
+                        )
+                    )
+                }
+            }
+
+            // Reminders (Lembretes de pagamento)
+            val remindersArray = jsonObject.optJSONArray("reminders") ?: JSONArray()
+            val remindersList = mutableListOf<ReminderItem>()
+            for (i in 0 until remindersArray.length()) {
+                val rObj = remindersArray.optJSONObject(i) ?: continue
+                val id = rObj.optString("id", UUID.randomUUID().toString())
+                val name = rObj.optString("name", "")
+                val value = rObj.optDouble("value", 0.0)
+                val rawDate = rObj.optString("date", "")
+                val normalizedDate = ReminderSyncUtils.normalizeDate(rawDate)
+                val isPaid = rObj.optBoolean("isPaid", false)
+                val isRecurring = rObj.optBoolean("isRecurring", false)
+                val recurrenceFrequency = rObj.optString("recurrenceFrequency", "MONTHLY")
+                val totalOccurrences = rObj.optInt("totalOccurrences", 1)
+                val currentOccurrence = rObj.optInt("currentOccurrence", 1)
+                val paymentMethod = if (rObj.has("paymentMethod") && !rObj.isNull("paymentMethod")) rObj.optString("paymentMethod") else null
+                val recurrenceGroupId = if (rObj.has("recurrenceGroupId") && !rObj.isNull("recurrenceGroupId")) rObj.optString("recurrenceGroupId") else null
+                val notifyOnDueDate = rObj.optBoolean("notifyOnDueDate", true)
+                val notifyOneDayBefore = rObj.optBoolean("notifyOneDayBefore", false)
+                val createdAt = if (rObj.has("createdAt") && !rObj.isNull("createdAt")) rObj.optString("createdAt") else null
+                val updatedAt = if (rObj.has("updatedAt") && !rObj.isNull("updatedAt")) rObj.optString("updatedAt") else null
+
+                if (name.isNotBlank()) {
+                    remindersList.add(
+                        ReminderItem(
+                            id = id,
+                            name = name,
+                            value = value,
+                            date = normalizedDate,
+                            isPaid = isPaid,
+                            isRecurring = isRecurring,
+                            recurrenceFrequency = recurrenceFrequency,
+                            totalOccurrences = totalOccurrences,
+                            currentOccurrence = currentOccurrence,
+                            paymentMethod = paymentMethod,
+                            recurrenceGroupId = recurrenceGroupId,
+                            notifyOnDueDate = notifyOnDueDate,
+                            notifyOneDayBefore = notifyOneDayBefore,
                             createdAt = createdAt,
                             updatedAt = updatedAt
                         )
@@ -216,6 +280,15 @@ object StorageReader {
                 )
             } else null
 
+            val themeModeStr = jsonObject.optString("themeMode", ThemeMode.SYSTEM.name)
+            val themeMode = try {
+                ThemeMode.valueOf(themeModeStr)
+            } catch (_: Exception) {
+                ThemeMode.SYSTEM
+            }
+
+            val selectedPalette = jsonObject.optString("selectedPalette", "OBSIDIAN")
+
             val loadedData = StorageData(
                 version = version,
                 cards = cardsList,
@@ -223,6 +296,9 @@ object StorageReader {
                 subscriptions = subscriptionsList,
                 cardPayments = cardPaymentsList,
                 dailyExpenses = dailyExpensesList,
+                reminders = remindersList,
+                themeMode = themeMode,
+                selectedPalette = selectedPalette,
                 googleAccount = googleAccount
             )
 
